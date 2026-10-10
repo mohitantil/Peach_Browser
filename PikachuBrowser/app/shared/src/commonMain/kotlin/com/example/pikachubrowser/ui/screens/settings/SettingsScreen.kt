@@ -24,6 +24,9 @@ fun SettingsScreen(
     isAdBlockEnabled: Boolean = true,
     isPrivateMode: Boolean = false,
     isClearSessionOnExitEnabled: Boolean = true,
+    isTrackingProtectionEnabled: Boolean = true,
+    isFarblingEnabled: Boolean = true,
+    isDeAmpEnabled: Boolean = true,
     searchEngine: String = "DuckDuckGo",
     onIntent: (BrowserIntent) -> Unit,
     onNavigateBack: () -> Unit,
@@ -82,6 +85,27 @@ fun SettingsScreen(
                         subtitle = "Blocks intrusive ads, analytics, and third-party trackers.",
                         checked = isAdBlockEnabled,
                         onCheckedChange = { onIntent(BrowserIntent.ToggleAdBlock(it)) }
+                    )
+                    HorizontalDivider(color = Color(0xFFF2F2F2))
+                    SettingsToggleRow(
+                        title = "Strip Tracking URL Parameters",
+                        subtitle = "Automatically removes tracking tokens (like fbclid, gclid, utm_*, and si) from shared and visited links.",
+                        checked = isTrackingProtectionEnabled,
+                        onCheckedChange = { onIntent(BrowserIntent.ToggleTrackingProtection(it)) }
+                    )
+                    HorizontalDivider(color = Color(0xFFF2F2F2))
+                    SettingsToggleRow(
+                        title = "Fingerprinting Farbler",
+                        subtitle = "Randomizes Canvas, AudioContext, and WebGL entropy per domain so tracker libraries cannot profile your device.",
+                        checked = isFarblingEnabled,
+                        onCheckedChange = { onIntent(BrowserIntent.ToggleFarbling(it)) }
+                    )
+                    HorizontalDivider(color = Color(0xFFF2F2F2))
+                    SettingsToggleRow(
+                        title = "De-AMP Direct Links",
+                        subtitle = "Automatically unwraps Google AMP cache pages to visit canonical publisher websites directly.",
+                        checked = isDeAmpEnabled,
+                        onCheckedChange = { onIntent(BrowserIntent.ToggleDeAmp(it)) }
                     )
                     HorizontalDivider(color = Color(0xFFF2F2F2))
                     SettingsToggleRow(

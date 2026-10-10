@@ -422,6 +422,9 @@ fun App() {
                             isAdBlockEnabled = browserState.isAdBlockEnabled,
                             isPrivateMode = browserState.isPrivateMode,
                             isClearSessionOnExitEnabled = browserState.isClearSessionOnExitEnabled,
+                            isTrackingProtectionEnabled = browserState.isTrackingProtectionEnabled,
+                            isFarblingEnabled = browserState.isFarblingEnabled,
+                            isDeAmpEnabled = browserState.isDeAmpEnabled,
                             searchEngine = browserState.searchEngine,
                             onIntent = { browserViewModel.processIntent(it) },
                             onNavigateBack = { navController.popBackStack() }

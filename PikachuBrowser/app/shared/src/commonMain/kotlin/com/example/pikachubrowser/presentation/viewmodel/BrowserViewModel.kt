@@ -8,6 +8,7 @@ import com.example.pikachubrowser.domain.model.Tab
 import com.example.pikachubrowser.presentation.mvi.BrowserIntent
 import com.example.pikachubrowser.presentation.mvi.BrowserState
 import com.example.pikachubrowser.presentation.mvi.QuickLink
+import com.example.pikachubrowser.util.UrlSanitizer
 import com.example.pikachubrowser.util.clearBrowserSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,9 @@ class BrowserViewModel(
             var adBlock = _state.value.isAdBlockEnabled
             var privateMode = _state.value.isPrivateMode
             var clearSession = _state.value.isClearSessionOnExitEnabled
+            var trackingProtection = _state.value.isTrackingProtectionEnabled
+            var farbling = _state.value.isFarblingEnabled
+            var deAmp = _state.value.isDeAmpEnabled
             var searchEngine = _state.value.searchEngine
 
             for (setting in settingsList) {
@@ -40,6 +44,9 @@ class BrowserViewModel(
                     "ad_block_enabled" -> adBlock = setting.setting_value.toBooleanStrictOrNull() ?: adBlock
                     "private_mode" -> privateMode = setting.setting_value.toBooleanStrictOrNull() ?: privateMode
                     "clear_session_on_exit" -> clearSession = setting.setting_value.toBooleanStrictOrNull() ?: clearSession
+                    "tracking_protection_enabled" -> trackingProtection = setting.setting_value.toBooleanStrictOrNull() ?: trackingProtection
+                    "farbling_enabled" -> farbling = setting.setting_value.toBooleanStrictOrNull() ?: farbling
+                    "deamp_enabled" -> deAmp = setting.setting_value.toBooleanStrictOrNull() ?: deAmp
                     "search_engine" -> searchEngine = setting.setting_value
                 }
             }
@@ -49,6 +56,9 @@ class BrowserViewModel(
                 isAdBlockEnabled = adBlock,
                 isPrivateMode = privateMode,
                 isClearSessionOnExitEnabled = clearSession,
+                isTrackingProtectionEnabled = trackingProtection,
+                isFarblingEnabled = farbling,
+                isDeAmpEnabled = deAmp,
                 searchEngine = searchEngine
             )
 
@@ -79,16 +89,22 @@ class BrowserViewModel(
                     if (!url.startsWith("http://") && !url.startsWith("https://")) {
                         url = "https://$url"
                     }
+                    if (_state.value.isTrackingProtectionEnabled || _state.value.isDeAmpEnabled) {
+                        url = UrlSanitizer.sanitize(url)
+                    }
                     updateCurrentTab { tab ->
                         tab.copy(url = url)
                     }
                 }
             }
             is BrowserIntent.SearchQuery -> {
-                val searchUrl = when (_state.value.searchEngine.lowercase()) {
+                var searchUrl = when (_state.value.searchEngine.lowercase()) {
                     "google" -> "https://www.google.com/search?q=${intent.query.trim()}"
                     "brave" -> "https://search.brave.com/search?q=${intent.query.trim()}"
                     else -> "https://html.duckduckgo.com/html/?q=${intent.query.trim()}"
+                }
+                if (_state.value.isTrackingProtectionEnabled) {
+                    searchUrl = UrlSanitizer.sanitize(searchUrl)
                 }
                 updateCurrentTab { tab ->
                     tab.copy(url = searchUrl)
@@ -197,6 +213,18 @@ class BrowserViewModel(
             is BrowserIntent.ToggleClearSessionOnExit -> {
                 _state.value = _state.value.copy(isClearSessionOnExitEnabled = intent.enabled)
                 persistSetting("clear_session_on_exit", intent.enabled.toString())
+            }
+            is BrowserIntent.ToggleTrackingProtection -> {
+                _state.value = _state.value.copy(isTrackingProtectionEnabled = intent.enabled)
+                persistSetting("tracking_protection_enabled", intent.enabled.toString())
+            }
+            is BrowserIntent.ToggleFarbling -> {
+                _state.value = _state.value.copy(isFarblingEnabled = intent.enabled)
+                persistSetting("farbling_enabled", intent.enabled.toString())
+            }
+            is BrowserIntent.ToggleDeAmp -> {
+                _state.value = _state.value.copy(isDeAmpEnabled = intent.enabled)
+                persistSetting("deamp_enabled", intent.enabled.toString())
             }
             is BrowserIntent.SetSearchEngine -> {
                 _state.value = _state.value.copy(searchEngine = intent.engine)

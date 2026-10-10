@@ -82,3 +82,9 @@
     - `PikachuNativeWebView`: Overrode `onWindowVisibilityChanged`, `dispatchWindowVisibilityChanged`, `onVisibilityChanged`, `onWindowFocusChanged`, `onPause`, and `pauseTimers` to prevent Chromium from freezing media decoders and audio buffers.
     - `background_playback.bundle.js`: Injected into Android and iOS assets; overrides Page Visibility API (`hidden`, `visibilityState`, `hasFocus`), drops visibility event listeners, intercepts `HTMLMediaElement.pause` to block auto-pauses while honoring manual clicks, and maintains auto-resume watchdog.
     - Promoted `BrowserViewModel` in Koin `viewModelModule` from `factory` to `single` to share global browser state reliably across `MainActivity`, `App`, and `PikachuWebView`.
+  - Created sub-branch `feature/brave-privacy` branching off `kmp-browser`.
+  - Implemented Brave-Grade User Privacy Engine (Multiplatform Android & iOS):
+    - `UrlSanitizer.kt`: Pure KMP URL filter stripping cross-site tracking tokens (`fbclid`, `gclid`, `utm_*`, `si`, `igshid`, `msclkid`, etc.) and automatically De-AMPing Google cache URLs to canonical publisher links.
+    - `farbling.bundle.js`: Injected at `document-start` into Android WebView and iOS WKWebView (`WKUserScript`). Injects deterministic per-origin and per-session pseudo-random micro-noise into Canvas (`toDataURL`, `getImageData`), AudioContext (`getChannelData`, `getFloatFrequencyData`), and WebGL vendor/renderer parameters to neutralize fingerprinting (e.g. FingerprintJS). Emits `Sec-GPC: 1` and `DNT: 1` signals.
+    - `SettingsScreen.kt`: Added user toggles for Tracking Query Filter, Fingerprinting Farbler, and De-AMPing, persisted via SQLDelight.
+    - `ChatDrawer.kt`: Updated Pikachu AI assistant window with an elegant banner: *"This feature is currently not available. We will make it available soon."*

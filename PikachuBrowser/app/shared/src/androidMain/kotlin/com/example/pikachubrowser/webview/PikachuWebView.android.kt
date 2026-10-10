@@ -23,6 +23,14 @@ import com.example.pikachubrowser.presentation.viewmodel.BrowserViewModel
 import com.example.pikachubrowser.util.clearBrowserSession
 import org.koin.compose.koinInject
 
+private fun loadFarblingScript(context: Context): String {
+    return try {
+        context.assets.open("farbling.bundle.js").bufferedReader().use { it.readText() }
+    } catch (e: Exception) {
+        ""
+    }
+}
+
 private fun loadBackgroundScript(context: Context): String {
     return try {
         context.assets.open("background_playback.bundle.js").bufferedReader().use { it.readText() }
@@ -114,6 +122,7 @@ actual fun PikachuWebView(
     val activity = context as? Activity
 
     val backgroundScript = remember(context) { loadBackgroundScript(context) }
+    val farblingScript = remember(context) { loadFarblingScript(context) }
     var lastLoadedUrl by remember { mutableStateOf<String?>(null) }
 
     AndroidView(
@@ -153,6 +162,9 @@ actual fun PikachuWebView(
                             controller?.currentUrl = pageUrl
                             browserViewModel.processIntent(BrowserIntent.UrlChanged(pageUrl))
                         }
+                        if (browserState.isFarblingEnabled && farblingScript.isNotBlank()) {
+                            view?.evaluateJavascript(farblingScript, null)
+                        }
                         if (browserState.isBackgroundPlayEnabled) {
                             view?.evaluateJavascript(backgroundScript, null)
                         }
@@ -168,6 +180,10 @@ actual fun PikachuWebView(
                             controller?.currentUrl = pageUrl
                             controller?.currentTitle = pageTitle
                             browserViewModel.processIntent(BrowserIntent.PageLoaded(pageUrl, pageTitle))
+                        }
+
+                        if (browserState.isFarblingEnabled && farblingScript.isNotBlank()) {
+                            view?.evaluateJavascript(farblingScript, null)
                         }
 
                         if (browserState.isBackgroundPlayEnabled) {
@@ -233,6 +249,21 @@ actual fun PikachuWebView(
                     }
                 }
 
+                // Farbling Anti-Fingerprinting Script Injection
+                if (browserState.isFarblingEnabled && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    try {
+                        if (farblingScript.isNotBlank()) {
+                            WebViewCompat.addDocumentStartJavaScript(
+                                this,
+                                farblingScript,
+                                setOf("*")
+                            )
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
                 // Background Playback Visibility Spoofing Script
                 if (browserState.isBackgroundPlayEnabled && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                     try {
@@ -250,6 +281,9 @@ actual fun PikachuWebView(
         update = { webView ->
             if (webView is PikachuNativeWebView) {
                 webView.isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
+                if (browserState.isFarblingEnabled && farblingScript.isNotBlank()) {
+                    webView.evaluateJavascript(farblingScript, null)
+                }
                 if (browserState.isBackgroundPlayEnabled) {
                     webView.evaluateJavascript(backgroundScript, null)
                 }

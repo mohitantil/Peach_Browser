@@ -61,6 +61,20 @@ actual fun PikachuWebView(
                 userContentController.addUserScript(bgScript)
             }
         }
+
+        // Inject Farbling Anti-Fingerprinting Engine
+        val farblingPath = NSBundle.mainBundle.pathForResource("farbling.bundle", "js")
+        if (farblingPath != null) {
+            val farblingJs = NSString.stringWithContentsOfFile(farblingPath, NSUTF8StringEncoding, null)
+            if (farblingJs != null) {
+                val farblingScript = WKUserScript(
+                    source = farblingJs,
+                    injectionTime = WKUserScriptInjectionTime.WKUserScriptInjectionTimeAtDocumentStart,
+                    forMainFrameOnly = false
+                )
+                userContentController.addUserScript(farblingScript)
+            }
+        }
         config.userContentController = userContentController
         config.allowsInlineMediaPlayback = true
 
