@@ -8,6 +8,7 @@ import com.example.pikachubrowser.domain.model.Tab
 import com.example.pikachubrowser.presentation.mvi.BrowserIntent
 import com.example.pikachubrowser.presentation.mvi.BrowserState
 import com.example.pikachubrowser.presentation.mvi.QuickLink
+import com.example.pikachubrowser.util.clearBrowserSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,56 @@ class BrowserViewModel(
 
     private val _state = MutableStateFlow(BrowserState())
     val state: StateFlow<BrowserState> = _state.asStateFlow()
+
+    init {
+        loadPersistedSettings()
+    }
+
+    private fun loadPersistedSettings() {
+        try {
+            val settingsList = database?.settingsQueries?.getAllSettings()?.executeAsList() ?: emptyList()
+            var bgPlay = _state.value.isBackgroundPlayEnabled
+            var adBlock = _state.value.isAdBlockEnabled
+            var privateMode = _state.value.isPrivateMode
+            var clearSession = _state.value.isClearSessionOnExitEnabled
+            var searchEngine = _state.value.searchEngine
+
+            for (setting in settingsList) {
+                when (setting.key) {
+                    "background_play_enabled" -> bgPlay = setting.value.toBooleanStrictOrNull() ?: bgPlay
+                    "ad_block_enabled" -> adBlock = setting.value.toBooleanStrictOrNull() ?: adBlock
+                    "private_mode" -> privateMode = setting.value.toBooleanStrictOrNull() ?: privateMode
+                    "clear_session_on_exit" -> clearSession = setting.value.toBooleanStrictOrNull() ?: clearSession
+                    "search_engine" -> searchEngine = setting.value
+                }
+            }
+
+            _state.value = _state.value.copy(
+                isBackgroundPlayEnabled = bgPlay,
+                isAdBlockEnabled = adBlock,
+                isPrivateMode = privateMode,
+                isClearSessionOnExitEnabled = clearSession,
+                searchEngine = searchEngine
+            )
+
+            // If clear session on exit is enabled or private mode is active, clear cookies/storage on startup
+            if (clearSession || privateMode) {
+                clearBrowserSession()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun persistSetting(key: String, value: String) {
+        viewModelScope.launch {
+            try {
+                database?.settingsQueries?.setSetting(key, value)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     fun processIntent(intent: BrowserIntent) {
         when (intent) {
@@ -35,10 +86,14 @@ class BrowserViewModel(
                 }
             }
             is BrowserIntent.SearchQuery -> {
-                val queryUrl = "https://html.duckduckgo.com/html/?q=${intent.query.trim()}"
+                val searchUrl = when (_state.value.searchEngine.lowercase()) {
+                    "google" -> "https://www.google.com/search?q=${intent.query.trim()}"
+                    "brave" -> "https://search.brave.com/search?q=${intent.query.trim()}"
+                    else -> "https://html.duckduckgo.com/html/?q=${intent.query.trim()}"
+                }
                 updateCurrentTab { tab ->
-                    val newHistory = tab.history.take(tab.historyIndex + 1) + queryUrl
-                    tab.copy(url = queryUrl, history = newHistory, historyIndex = newHistory.size - 1)
+                    val newHistory = tab.history.take(tab.historyIndex + 1) + searchUrl
+                    tab.copy(url = searchUrl, history = newHistory, historyIndex = newHistory.size - 1)
                 }
             }
             is BrowserIntent.UrlChanged -> {
@@ -148,12 +203,36 @@ class BrowserViewModel(
             }
             is BrowserIntent.ToggleBackgroundPlay -> {
                 _state.value = _state.value.copy(isBackgroundPlayEnabled = intent.enabled)
+                persistSetting("background_play_enabled", intent.enabled.toString())
             }
             is BrowserIntent.ToggleAdBlock -> {
                 _state.value = _state.value.copy(isAdBlockEnabled = intent.enabled)
+                persistSetting("ad_block_enabled", intent.enabled.toString())
             }
             is BrowserIntent.TogglePrivateMode -> {
                 _state.value = _state.value.copy(isPrivateMode = intent.enabled)
+                persistSetting("private_mode", intent.enabled.toString())
+                if (intent.enabled) {
+                    clearBrowserSession()
+                }
+            }
+            is BrowserIntent.ToggleClearSessionOnExit -> {
+                _state.value = _state.value.copy(isClearSessionOnExitEnabled = intent.enabled)
+                persistSetting("clear_session_on_exit", intent.enabled.toString())
+            }
+            is BrowserIntent.SetSearchEngine -> {
+                _state.value = _state.value.copy(searchEngine = intent.engine)
+                persistSetting("search_engine", intent.engine)
+            }
+            is BrowserIntent.ClearAllBrowsingData -> {
+                clearBrowserSession()
+                viewModelScope.launch {
+                    try {
+                        database?.historyQueries?.clearAllHistory()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
             is BrowserIntent.AddQuickLink -> {
                 val link = QuickLink(title = intent.title, url = intent.url)

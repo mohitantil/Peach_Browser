@@ -1,7 +1,12 @@
 package com.example.pikachubrowser.webview
 
+import android.app.Activity
+import android.content.Context
 import android.graphics.Bitmap
+import android.view.View
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.*
@@ -15,7 +20,64 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.example.pikachubrowser.presentation.mvi.BrowserIntent
 import com.example.pikachubrowser.presentation.viewmodel.BrowserViewModel
+import com.example.pikachubrowser.util.clearBrowserSession
 import org.koin.compose.koinInject
+
+private const val BACKGROUND_PLAY_JS = """
+(function() {
+    try {
+        if (window.__pikachu_bg_installed) return;
+        window.__pikachu_bg_installed = true;
+
+        Object.defineProperty(document, 'hidden', {
+            get: function() { return false; },
+            configurable: true
+        });
+        Object.defineProperty(document, 'visibilityState', {
+            get: function() { return 'visible'; },
+            configurable: true
+        });
+        Object.defineProperty(document, 'webkitHidden', {
+            get: function() { return false; },
+            configurable: true
+        });
+        Object.defineProperty(document, 'webkitVisibilityState', {
+            get: function() { return 'visible'; },
+            configurable: true
+        });
+
+        ['visibilitychange', 'webkitvisibilitychange', 'blur', 'pagehide'].forEach(function(evt) {
+            window.addEventListener(evt, function(e) {
+                e.stopImmediatePropagation();
+            }, true);
+            document.addEventListener(evt, function(e) {
+                e.stopImmediatePropagation();
+            }, true);
+        });
+
+        var originalPause = HTMLMediaElement.prototype.pause;
+        HTMLMediaElement.prototype.pause = function() {
+            if (document.hidden || !document.hasFocus()) {
+                return;
+            }
+            return originalPause.apply(this, arguments);
+        };
+    } catch(e) {}
+})();
+"""
+
+class PikachuNativeWebView(context: Context) : WebView(context) {
+    var isBackgroundPlayActive: Boolean = false
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        if (isBackgroundPlayActive && (visibility == View.GONE || visibility == View.INVISIBLE)) {
+            // Keep Chromium's media pipeline believing the window is visible so it does not suspend audio/video decoders
+            super.onWindowVisibilityChanged(View.VISIBLE)
+            return
+        }
+        super.onWindowVisibilityChanged(visibility)
+    }
+}
 
 @Composable
 actual fun PikachuWebView(
@@ -26,13 +88,16 @@ actual fun PikachuWebView(
     val browserViewModel = koinInject<BrowserViewModel>()
     val browserState by browserViewModel.state.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    val activity = context as? Activity
 
     var lastLoadedUrl by remember { mutableStateOf<String?>(null) }
 
     AndroidView(
         modifier = modifier,
-        factory = { context ->
-            WebView(context).apply {
+        factory = { ctx ->
+            PikachuNativeWebView(ctx).apply {
+                isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
                 isNestedScrollingEnabled = true
                 settings.apply {
                     javaScriptEnabled = true
@@ -45,10 +110,14 @@ actual fun PikachuWebView(
                     loadWithOverviewMode = true
                 }
 
-                if (browserState.isPrivateMode) {
-                    android.webkit.CookieManager.getInstance().setAcceptCookie(false)
-                } else {
-                    android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                // If clear session on exit or private mode is active, enforce clean session on launch
+                if (browserState.isPrivateMode || browserState.isClearSessionOnExitEnabled) {
+                    CookieManager.getInstance().removeAllCookies(null)
+                    CookieManager.getInstance().removeSessionCookies(null)
+                    WebStorage.getInstance().deleteAllData()
+                    clearCache(true)
+                    clearFormData()
+                    clearHistory()
                 }
 
                 webViewClient = object : WebViewClient() {
@@ -60,6 +129,9 @@ actual fun PikachuWebView(
                         if (pageUrl != null) {
                             controller?.currentUrl = pageUrl
                             browserViewModel.processIntent(BrowserIntent.UrlChanged(pageUrl))
+                        }
+                        if (browserState.isBackgroundPlayEnabled) {
+                            view?.evaluateJavascript(BACKGROUND_PLAY_JS, null)
                         }
                     }
 
@@ -73,6 +145,10 @@ actual fun PikachuWebView(
                             controller?.currentUrl = pageUrl
                             controller?.currentTitle = pageTitle
                             browserViewModel.processIntent(BrowserIntent.PageLoaded(pageUrl, pageTitle))
+                        }
+
+                        if (browserState.isBackgroundPlayEnabled) {
+                            view?.evaluateJavascript(BACKGROUND_PLAY_JS, null)
                         }
 
                         // Extract readable page text for Pikachu AI assistant
@@ -123,7 +199,7 @@ actual fun PikachuWebView(
                 // Privacy Shield Script Injection
                 if (browserState.isAdBlockEnabled && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                     try {
-                        val shieldJs = context.assets.open("privacy_shield.bundle.js").bufferedReader().use { it.readText() }
+                        val shieldJs = ctx.assets.open("privacy_shield.bundle.js").bufferedReader().use { it.readText() }
                         WebViewCompat.addDocumentStartJavaScript(
                             this,
                             shieldJs,
@@ -133,9 +209,26 @@ actual fun PikachuWebView(
                         e.printStackTrace()
                     }
                 }
+
+                // Background Playback Visibility Spoofing Script
+                if (browserState.isBackgroundPlayEnabled && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    try {
+                        WebViewCompat.addDocumentStartJavaScript(
+                            this,
+                            BACKGROUND_PLAY_JS,
+                            setOf("*")
+                        )
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
         },
         update = { webView ->
+            if (webView is PikachuNativeWebView) {
+                webView.isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
+            }
+
             // Re-bind controller actions on update
             controller?.goBackAction = { if (webView.canGoBack()) webView.goBack() }
             controller?.goForwardAction = { if (webView.canGoForward()) webView.goForward() }
@@ -154,13 +247,21 @@ actual fun PikachuWebView(
         }
     )
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, browserState.isClearSessionOnExitEnabled, browserState.isPrivateMode) {
         val observer = LifecycleEventObserver { _, event ->
-            // If background play is enabled, let media keep playing
+            // Only clear when the app activity is actually finishing/destroyed, not when temporarily minimized
+            if (event == Lifecycle.Event.ON_DESTROY && activity?.isFinishing == true) {
+                if (browserState.isClearSessionOnExitEnabled || browserState.isPrivateMode) {
+                    clearBrowserSession()
+                }
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            if (activity?.isFinishing == true && (browserState.isClearSessionOnExitEnabled || browserState.isPrivateMode)) {
+                clearBrowserSession()
+            }
         }
     }
 }

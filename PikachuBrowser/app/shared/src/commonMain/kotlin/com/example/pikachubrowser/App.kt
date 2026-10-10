@@ -419,6 +419,10 @@ fun App() {
                     composable<SettingsRoute> {
                         SettingsScreen(
                             isBackgroundPlayEnabled = browserState.isBackgroundPlayEnabled,
+                            isAdBlockEnabled = browserState.isAdBlockEnabled,
+                            isPrivateMode = browserState.isPrivateMode,
+                            isClearSessionOnExitEnabled = browserState.isClearSessionOnExitEnabled,
+                            searchEngine = browserState.searchEngine,
                             onIntent = { browserViewModel.processIntent(it) },
                             onNavigateBack = { navController.popBackStack() }
                         )

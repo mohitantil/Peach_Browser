@@ -26,6 +26,9 @@ sealed interface BrowserIntent {
     data class ToggleBackgroundPlay(val enabled: Boolean) : BrowserIntent
     data class ToggleAdBlock(val enabled: Boolean) : BrowserIntent
     data class TogglePrivateMode(val enabled: Boolean) : BrowserIntent
+    data class ToggleClearSessionOnExit(val enabled: Boolean) : BrowserIntent
+    data class SetSearchEngine(val engine: String) : BrowserIntent
+    object ClearAllBrowsingData : BrowserIntent
     data class AddQuickLink(val title: String, val url: String) : BrowserIntent
     data class RemoveQuickLink(val url: String) : BrowserIntent
     data class SaveBookmark(val url: String, val title: String) : BrowserIntent
@@ -40,6 +43,8 @@ data class BrowserState(
     val isBackgroundPlayEnabled: Boolean = false,
     val isAdBlockEnabled: Boolean = true,
     val isPrivateMode: Boolean = false,
+    val isClearSessionOnExitEnabled: Boolean = true,
+    val searchEngine: String = "DuckDuckGo",
     val reloadTrigger: Int = 0,
     val activePageContent: String = "",
     val activePageTitle: String = "",
