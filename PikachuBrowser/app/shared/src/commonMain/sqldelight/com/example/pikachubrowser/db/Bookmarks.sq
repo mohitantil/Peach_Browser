@@ -1,0 +1,16 @@
+CREATE TABLE BookmarkEntity (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    createdAt INTEGER NOT NULL
+);
+
+insertBookmark:
+INSERT INTO BookmarkEntity(url, title, createdAt)
+VALUES (?, ?, ?);
+
+getAllBookmarks:
+SELECT * FROM BookmarkEntity ORDER BY createdAt DESC;
+
+deleteBookmark:
+DELETE FROM BookmarkEntity WHERE id = ?;

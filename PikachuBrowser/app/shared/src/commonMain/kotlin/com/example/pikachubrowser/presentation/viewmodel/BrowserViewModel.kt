@@ -1,0 +1,186 @@
+package com.example.pikachubrowser.presentation.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.pikachubrowser.currentTimeMillis
+import com.example.pikachubrowser.db.PikachuDatabase
+import com.example.pikachubrowser.domain.model.Tab
+import com.example.pikachubrowser.presentation.mvi.BrowserIntent
+import com.example.pikachubrowser.presentation.mvi.BrowserState
+import com.example.pikachubrowser.presentation.mvi.QuickLink
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+class BrowserViewModel(
+    private val database: PikachuDatabase? = null
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(BrowserState())
+    val state: StateFlow<BrowserState> = _state.asStateFlow()
+
+    fun processIntent(intent: BrowserIntent) {
+        when (intent) {
+            is BrowserIntent.LoadUrl -> {
+                var url = intent.url.trim()
+                if (url.isNotBlank()) {
+                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                        url = "https://$url"
+                    }
+                    updateCurrentTab { tab ->
+                        val newHistory = tab.history.take(tab.historyIndex + 1) + url
+                        tab.copy(url = url, history = newHistory, historyIndex = newHistory.size - 1)
+                    }
+                }
+            }
+            is BrowserIntent.SearchQuery -> {
+                val queryUrl = "https://html.duckduckgo.com/html/?q=${intent.query.trim()}"
+                updateCurrentTab { tab ->
+                    val newHistory = tab.history.take(tab.historyIndex + 1) + queryUrl
+                    tab.copy(url = queryUrl, history = newHistory, historyIndex = newHistory.size - 1)
+                }
+            }
+            is BrowserIntent.UrlChanged -> {
+                updateCurrentTab { tab ->
+                    tab.copy(url = intent.url)
+                }
+            }
+            is BrowserIntent.PageLoaded -> {
+                val url = intent.url
+                val title = intent.title.ifBlank { url }
+                _state.value = _state.value.copy(activePageTitle = title)
+                if (!_state.value.isPrivateMode && url.isNotBlank() && !url.startsWith("about:")) {
+                    viewModelScope.launch {
+                        try {
+                            database?.historyQueries?.insertHistory(
+                                url = url,
+                                title = title,
+                                visitedAt = currentTimeMillis()
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            }
+            is BrowserIntent.UpdatePageContent -> {
+                _state.value = _state.value.copy(activePageContent = intent.content)
+            }
+            is BrowserIntent.GoHome -> {
+                updateCurrentTab { tab ->
+                    tab.copy(url = "", historyIndex = 0)
+                }
+            }
+            is BrowserIntent.GoBack -> {
+                updateCurrentTab { tab ->
+                    if (tab.historyIndex > 0) {
+                        val newIndex = tab.historyIndex - 1
+                        tab.copy(url = tab.history[newIndex], historyIndex = newIndex)
+                    } else tab
+                }
+            }
+            is BrowserIntent.GoForward -> {
+                updateCurrentTab { tab ->
+                    if (tab.historyIndex < tab.history.size - 1) {
+                        val newIndex = tab.historyIndex + 1
+                        tab.copy(url = tab.history[newIndex], historyIndex = newIndex)
+                    } else tab
+                }
+            }
+            is BrowserIntent.AddTab -> {
+                val newTab = Tab(
+                    id = "tab_${_state.value.tabs.size + 1}",
+                    url = intent.url,
+                    history = if (intent.url.isNotBlank()) listOf(intent.url) else listOf("")
+                )
+                _state.value = _state.value.copy(
+                    tabs = _state.value.tabs + newTab,
+                    activeTabId = newTab.id
+                )
+            }
+            is BrowserIntent.SwitchTab -> {
+                if (_state.value.tabs.any { it.id == intent.tabId }) {
+                    _state.value = _state.value.copy(activeTabId = intent.tabId)
+                }
+            }
+            is BrowserIntent.CloseTab -> {
+                val newTabs = _state.value.tabs.filter { it.id != intent.tabId }
+                if (newTabs.isNotEmpty()) {
+                    val newActiveId = if (_state.value.activeTabId == intent.tabId) newTabs.last().id else _state.value.activeTabId
+                    _state.value = _state.value.copy(tabs = newTabs, activeTabId = newActiveId)
+                } else {
+                    val defaultTab = Tab(id = "tab_1")
+                    _state.value = _state.value.copy(tabs = listOf(defaultTab), activeTabId = defaultTab.id)
+                }
+            }
+            is BrowserIntent.Reload -> {
+                _state.value = _state.value.copy(reloadTrigger = _state.value.reloadTrigger + 1)
+            }
+            is BrowserIntent.ToggleBackgroundPlay -> {
+                _state.value = _state.value.copy(isBackgroundPlayEnabled = intent.enabled)
+            }
+            is BrowserIntent.ToggleAdBlock -> {
+                _state.value = _state.value.copy(isAdBlockEnabled = intent.enabled)
+            }
+            is BrowserIntent.TogglePrivateMode -> {
+                _state.value = _state.value.copy(isPrivateMode = intent.enabled)
+            }
+            is BrowserIntent.AddQuickLink -> {
+                val link = QuickLink(title = intent.title, url = intent.url)
+                _state.value = _state.value.copy(quickLinks = _state.value.quickLinks + link)
+            }
+            is BrowserIntent.RemoveQuickLink -> {
+                _state.value = _state.value.copy(quickLinks = _state.value.quickLinks.filter { it.url != intent.url })
+            }
+            is BrowserIntent.SaveBookmark -> {
+                viewModelScope.launch {
+                    try {
+                        database?.bookmarksQueries?.insertBookmark(
+                            url = intent.url,
+                            title = intent.title.ifBlank { intent.url },
+                            createdAt = currentTimeMillis()
+                        )
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+            is BrowserIntent.DeleteBookmark -> {
+                viewModelScope.launch {
+                    try {
+                        database?.bookmarksQueries?.deleteBookmark(intent.id)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+            is BrowserIntent.DeleteHistoryItem -> {
+                viewModelScope.launch {
+                    try {
+                        database?.historyQueries?.deleteHistoryById(intent.id)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+            is BrowserIntent.ClearHistory -> {
+                viewModelScope.launch {
+                    try {
+                        database?.historyQueries?.clearAllHistory()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateCurrentTab(update: (Tab) -> Tab) {
+        val currentState = _state.value
+        val updatedTabs = currentState.tabs.map {
+            if (it.id == currentState.activeTabId) update(it) else it
+        }
+        _state.value = currentState.copy(tabs = updatedTabs)
+    }
+}

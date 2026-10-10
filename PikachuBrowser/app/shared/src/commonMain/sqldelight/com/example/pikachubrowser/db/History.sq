@@ -1,0 +1,19 @@
+CREATE TABLE HistoryEntity (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    visitedAt INTEGER NOT NULL
+);
+
+insertHistory:
+INSERT INTO HistoryEntity(url, title, visitedAt)
+VALUES (?, ?, ?);
+
+getAllHistory:
+SELECT * FROM HistoryEntity ORDER BY visitedAt DESC;
+
+clearAllHistory:
+DELETE FROM HistoryEntity;
+
+deleteHistoryById:
+DELETE FROM HistoryEntity WHERE id = ?;

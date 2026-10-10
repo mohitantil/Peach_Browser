@@ -59,3 +59,9 @@ Thumbs.db
 src/ui/animejs_guide.md
 src/ui/basictoadv.md
 futurePlan.md
+
+# KMP build caches and machine-specific configs
+**/.gradle/
+**/build/
+PikachuBrowser/local.properties
+PikachuBrowser/.kotlin/
