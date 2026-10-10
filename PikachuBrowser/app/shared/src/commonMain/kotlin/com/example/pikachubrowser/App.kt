@@ -113,7 +113,7 @@ fun App() {
         var showChatSheet by remember { mutableStateOf(false) }
         var showMenuSheet by remember { mutableStateOf(false) }
 
-        // Sync address bar text with webViewController / route
+        // Sync address bar text with active page
         LaunchedEffect(navBackStackEntry, webViewController.currentUrl) {
             val route = currentDestination?.route
             if (route != null && route.contains("BrowserRoute")) {
@@ -133,10 +133,18 @@ fun App() {
             }
         }
 
-        // Hardware Back Button Handling
+        // Hardware Back Button Handling with clean tab backstack tracking
         CommonBackHandler(enabled = true) {
-            if (isBrowserPage && webViewController.canGoBack) {
-                webViewController.goBack()
+            if (isBrowserPage) {
+                if (webViewController.canGoBack) {
+                    webViewController.goBack()
+                } else {
+                    // Navigate to Home Landing page for this tab
+                    browserViewModel.processIntent(BrowserIntent.GoHome)
+                    navController.navigate(LandingRoute) {
+                        popUpTo(LandingRoute) { inclusive = true }
+                    }
+                }
             } else if (!isLandingPage) {
                 navController.popBackStack()
             }
@@ -145,7 +153,7 @@ fun App() {
         // Nested Scroll Connection for Auto-Hiding Toolbars
         val density = LocalDensity.current
         val topBarHeight = 56.dp
-        val bottomBarHeight = 52.dp
+        val bottomBarHeight = 54.dp
         val topBarHeightPx = with(density) { topBarHeight.roundToPx().toFloat() }
         val bottomBarHeightPx = with(density) { bottomBarHeight.roundToPx().toFloat() }
 
@@ -168,7 +176,6 @@ fun App() {
             }
         }
 
-        // Reset offsets when returning to landing page
         LaunchedEffect(isLandingPage) {
             if (isLandingPage) {
                 topBarOffsetHeightPx = 0f
@@ -242,12 +249,10 @@ fun App() {
                                         if (input.contains(".") && !input.contains(" ")) {
                                             val url = if (!input.startsWith("http://") && !input.startsWith("https://")) "https://$input" else input
                                             browserViewModel.processIntent(BrowserIntent.LoadUrl(url))
-                                            webViewController.loadUrl(url)
                                             navController.navigate(BrowserRoute(url))
                                         } else {
                                             val searchUrl = "https://html.duckduckgo.com/html/?q=$input"
                                             browserViewModel.processIntent(BrowserIntent.SearchQuery(input))
-                                            webViewController.loadUrl(searchUrl)
                                             navController.navigate(BrowserRoute(searchUrl))
                                         }
                                     }
@@ -258,6 +263,7 @@ fun App() {
                 }
             },
             bottomBar = {
+                // Sleek, modern bottom navbar without useless arrow buttons
                 Surface(
                     color = Color.White,
                     shadowElevation = 12.dp,
@@ -268,68 +274,65 @@ fun App() {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 6.dp)
+                            .padding(horizontal = 24.dp, vertical = 6.dp)
                             .windowInsetsPadding(WindowInsets.navigationBars),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Native Back
-                        val canBack = webViewController.canGoBack || browserState.canGoBack
-                        Text(
-                            text = "◀",
-                            fontSize = 18.sp,
-                            color = if (canBack) Color(0xFF1E1E2E) else Color(0xFFCCCCCC),
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .clickable(enabled = canBack) {
-                                    webViewController.goBack()
-                                    browserViewModel.processIntent(BrowserIntent.GoBack)
-                                }
-                        )
-
-                        // Native Forward
-                        val canForward = webViewController.canGoForward || browserState.canGoForward
-                        Text(
-                            text = "▶",
-                            fontSize = 18.sp,
-                            color = if (canForward) Color(0xFF1E1E2E) else Color(0xFFCCCCCC),
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .clickable(enabled = canForward) {
-                                    webViewController.goForward()
-                                    browserViewModel.processIntent(BrowserIntent.GoForward)
-                                }
-                        )
-
-                        // Home Button
+                        // 1. Home Button
                         Surface(
                             shape = CircleShape,
                             color = if (isLandingPage) Color(0xFFE2D6F5) else Color.Transparent,
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(40.dp)
                                 .clickable {
                                     browserViewModel.processIntent(BrowserIntent.GoHome)
-                                    navController.navigate(LandingRoute)
+                                    navController.navigate(LandingRoute) {
+                                        popUpTo(LandingRoute) { inclusive = true }
+                                    }
                                 }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("⌂", fontSize = 22.sp, color = if (isLandingPage) Color(0xFF7E57C2) else Color(0xFF555555))
+                                Text("⌂", fontSize = 24.sp, color = if (isLandingPage) Color(0xFF7E57C2) else Color(0xFF555555))
                             }
                         }
 
-                        // Tabs Badge Button
+                        // 2. Center Sleek '✨ Pikachu AI' Action Button
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7E57C2)),
+                            shape = RoundedCornerShape(20.dp),
                             color = Color(0xFFF2EDFA),
                             modifier = Modifier
-                                .size(24.dp)
+                                .clickable { showChatSheet = true }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text("✨", fontSize = 14.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Ask AI",
+                                    color = Color(0xFF7E57C2),
+                                    fontFamily = FontFamily.SansSerif,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+
+                        // 3. Tabs Switcher Badge Button
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF7E57C2)),
+                            color = Color(0xFFF2EDFA),
+                            modifier = Modifier
+                                .size(30.dp)
                                 .clickable { navController.navigate(TabsListRoute) }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
                                     text = "${browserState.tabs.size}",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     color = Color(0xFF7E57C2),
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.SansSerif
@@ -337,10 +340,10 @@ fun App() {
                             }
                         }
 
-                        // Three Dots Menu Button
+                        // 4. Three-Dots Menu Button
                         Text(
                             text = "•••",
-                            fontSize = 20.sp,
+                            fontSize = 22.sp,
                             color = Color(0xFF7E57C2),
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
@@ -369,11 +372,9 @@ fun App() {
                                 if (intent is BrowserIntent.LoadUrl) {
                                     var u = intent.url
                                     if (!u.startsWith("http://") && !u.startsWith("https://")) u = "https://$u"
-                                    webViewController.loadUrl(u)
                                     navController.navigate(BrowserRoute(u))
                                 } else if (intent is BrowserIntent.SearchQuery) {
                                     val searchUrl = "https://html.duckduckgo.com/html/?q=${intent.query}"
-                                    webViewController.loadUrl(searchUrl)
                                     navController.navigate(BrowserRoute(searchUrl))
                                 }
                             }
@@ -391,7 +392,27 @@ fun App() {
                         TabsListScreen(
                             tabs = browserState.tabs,
                             activeTabId = browserState.activeTabId,
-                            onIntent = { browserViewModel.processIntent(it) },
+                            onSelectTab = { tabId, url ->
+                                browserViewModel.processIntent(BrowserIntent.SwitchTab(tabId))
+                                if (url.isNotBlank()) {
+                                    navController.navigate(BrowserRoute(url)) {
+                                        popUpTo(LandingRoute) { inclusive = false }
+                                    }
+                                } else {
+                                    navController.navigate(LandingRoute) {
+                                        popUpTo(LandingRoute) { inclusive = true }
+                                    }
+                                }
+                            },
+                            onNewTab = {
+                                browserViewModel.processIntent(BrowserIntent.AddTab(""))
+                                navController.navigate(LandingRoute) {
+                                    popUpTo(LandingRoute) { inclusive = true }
+                                }
+                            },
+                            onCloseTab = { tabId ->
+                                browserViewModel.processIntent(BrowserIntent.CloseTab(tabId))
+                            },
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
@@ -407,7 +428,6 @@ fun App() {
                             onOpenUrl = { url ->
                                 navController.popBackStack()
                                 browserViewModel.processIntent(BrowserIntent.LoadUrl(url))
-                                webViewController.loadUrl(url)
                                 navController.navigate(BrowserRoute(url))
                             },
                             onNavigateBack = { navController.popBackStack() }
@@ -420,7 +440,6 @@ fun App() {
                             onOpenUrl = { url ->
                                 navController.popBackStack()
                                 browserViewModel.processIntent(BrowserIntent.LoadUrl(url))
-                                webViewController.loadUrl(url)
                                 navController.navigate(BrowserRoute(url))
                             },
                             onNavigateBack = { navController.popBackStack() }
@@ -434,32 +453,6 @@ fun App() {
                     composable<AiSettingsRoute> {
                         AiSettingsScreen(
                             onNavigateBack = { navController.popBackStack() }
-                        )
-                    }
-                }
-
-                // Floating Ask Pikachu Pill
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0xFFF2EDFA),
-                    shadowElevation = 4.dp,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 16.dp, end = 16.dp)
-                        .clickable { showChatSheet = true }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Text("✨", fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            "Ask Pikachu",
-                            color = Color(0xFF7E57C2),
-                            fontFamily = FontFamily.SansSerif,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
                         )
                     }
                 }

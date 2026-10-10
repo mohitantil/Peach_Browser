@@ -50,6 +50,9 @@ class BrowserViewModel(
                 val url = intent.url
                 val title = intent.title.ifBlank { url }
                 _state.value = _state.value.copy(activePageTitle = title)
+                updateCurrentTab { tab ->
+                    tab.copy(url = url, title = title)
+                }
                 if (!_state.value.isPrivateMode && url.isNotBlank() && !url.startsWith("about:")) {
                     viewModelScope.launch {
                         try {
@@ -69,8 +72,9 @@ class BrowserViewModel(
             }
             is BrowserIntent.GoHome -> {
                 updateCurrentTab { tab ->
-                    tab.copy(url = "", historyIndex = 0)
+                    tab.copy(url = "", title = "New Tab", historyIndex = 0)
                 }
+                _state.value = _state.value.copy(activePageTitle = "New Tab")
             }
             is BrowserIntent.GoBack -> {
                 updateCurrentTab { tab ->
@@ -89,29 +93,54 @@ class BrowserViewModel(
                 }
             }
             is BrowserIntent.AddTab -> {
+                val newId = "tab_${currentTimeMillis()}_${_state.value.tabs.size + 1}"
+                val initialTitle = if (intent.url.isNotBlank()) intent.url else "New Tab"
                 val newTab = Tab(
-                    id = "tab_${_state.value.tabs.size + 1}",
+                    id = newId,
+                    title = initialTitle,
                     url = intent.url,
                     history = if (intent.url.isNotBlank()) listOf(intent.url) else listOf("")
                 )
                 _state.value = _state.value.copy(
                     tabs = _state.value.tabs + newTab,
-                    activeTabId = newTab.id
+                    activeTabId = newTab.id,
+                    activePageTitle = initialTitle
                 )
             }
             is BrowserIntent.SwitchTab -> {
-                if (_state.value.tabs.any { it.id == intent.tabId }) {
-                    _state.value = _state.value.copy(activeTabId = intent.tabId)
+                val targetTab = _state.value.tabs.find { it.id == intent.tabId }
+                if (targetTab != null) {
+                    _state.value = _state.value.copy(
+                        activeTabId = intent.tabId,
+                        activePageTitle = targetTab.title
+                    )
                 }
             }
             is BrowserIntent.CloseTab -> {
-                val newTabs = _state.value.tabs.filter { it.id != intent.tabId }
-                if (newTabs.isNotEmpty()) {
-                    val newActiveId = if (_state.value.activeTabId == intent.tabId) newTabs.last().id else _state.value.activeTabId
-                    _state.value = _state.value.copy(tabs = newTabs, activeTabId = newActiveId)
+                val remainingTabs = _state.value.tabs.filter { it.id != intent.tabId }
+                if (remainingTabs.isNotEmpty()) {
+                    val nextActiveId = if (_state.value.activeTabId == intent.tabId) {
+                        remainingTabs.last().id
+                    } else {
+                        _state.value.activeTabId
+                    }
+                    val nextActiveTab = remainingTabs.find { it.id == nextActiveId }
+                    _state.value = _state.value.copy(
+                        tabs = remainingTabs,
+                        activeTabId = nextActiveId,
+                        activePageTitle = nextActiveTab?.title ?: "New Tab"
+                    )
                 } else {
-                    val defaultTab = Tab(id = "tab_1")
-                    _state.value = _state.value.copy(tabs = listOf(defaultTab), activeTabId = defaultTab.id)
+                    val defaultTab = Tab(
+                        id = "tab_${currentTimeMillis()}_1",
+                        title = "New Tab",
+                        url = ""
+                    )
+                    _state.value = _state.value.copy(
+                        tabs = listOf(defaultTab),
+                        activeTabId = defaultTab.id,
+                        activePageTitle = "New Tab"
+                    )
                 }
             }
             is BrowserIntent.Reload -> {
