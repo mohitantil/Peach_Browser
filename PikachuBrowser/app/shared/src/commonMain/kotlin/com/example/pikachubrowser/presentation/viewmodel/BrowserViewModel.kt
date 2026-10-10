@@ -36,11 +36,11 @@ class BrowserViewModel(
 
             for (setting in settingsList) {
                 when (setting.key) {
-                    "background_play_enabled" -> bgPlay = setting.value.toBooleanStrictOrNull() ?: bgPlay
-                    "ad_block_enabled" -> adBlock = setting.value.toBooleanStrictOrNull() ?: adBlock
-                    "private_mode" -> privateMode = setting.value.toBooleanStrictOrNull() ?: privateMode
-                    "clear_session_on_exit" -> clearSession = setting.value.toBooleanStrictOrNull() ?: clearSession
-                    "search_engine" -> searchEngine = setting.value
+                    "background_play_enabled" -> bgPlay = setting.setting_value.toBooleanStrictOrNull() ?: bgPlay
+                    "ad_block_enabled" -> adBlock = setting.setting_value.toBooleanStrictOrNull() ?: adBlock
+                    "private_mode" -> privateMode = setting.setting_value.toBooleanStrictOrNull() ?: privateMode
+                    "clear_session_on_exit" -> clearSession = setting.setting_value.toBooleanStrictOrNull() ?: clearSession
+                    "search_engine" -> searchEngine = setting.setting_value
                 }
             }
 
@@ -80,8 +80,7 @@ class BrowserViewModel(
                         url = "https://$url"
                     }
                     updateCurrentTab { tab ->
-                        val newHistory = tab.history.take(tab.historyIndex + 1) + url
-                        tab.copy(url = url, history = newHistory, historyIndex = newHistory.size - 1)
+                        tab.copy(url = url)
                     }
                 }
             }
@@ -92,8 +91,7 @@ class BrowserViewModel(
                     else -> "https://html.duckduckgo.com/html/?q=${intent.query.trim()}"
                 }
                 updateCurrentTab { tab ->
-                    val newHistory = tab.history.take(tab.historyIndex + 1) + searchUrl
-                    tab.copy(url = searchUrl, history = newHistory, historyIndex = newHistory.size - 1)
+                    tab.copy(url = searchUrl)
                 }
             }
             is BrowserIntent.UrlChanged -> {
@@ -127,25 +125,9 @@ class BrowserViewModel(
             }
             is BrowserIntent.GoHome -> {
                 updateCurrentTab { tab ->
-                    tab.copy(url = "", title = "New Tab", historyIndex = 0)
+                    tab.copy(url = "", title = "New Tab")
                 }
                 _state.value = _state.value.copy(activePageTitle = "New Tab")
-            }
-            is BrowserIntent.GoBack -> {
-                updateCurrentTab { tab ->
-                    if (tab.historyIndex > 0) {
-                        val newIndex = tab.historyIndex - 1
-                        tab.copy(url = tab.history[newIndex], historyIndex = newIndex)
-                    } else tab
-                }
-            }
-            is BrowserIntent.GoForward -> {
-                updateCurrentTab { tab ->
-                    if (tab.historyIndex < tab.history.size - 1) {
-                        val newIndex = tab.historyIndex + 1
-                        tab.copy(url = tab.history[newIndex], historyIndex = newIndex)
-                    } else tab
-                }
             }
             is BrowserIntent.AddTab -> {
                 val newId = "tab_${currentTimeMillis()}_${_state.value.tabs.size + 1}"
@@ -153,8 +135,7 @@ class BrowserViewModel(
                 val newTab = Tab(
                     id = newId,
                     title = initialTitle,
-                    url = intent.url,
-                    history = if (intent.url.isNotBlank()) listOf(intent.url) else listOf("")
+                    url = intent.url
                 )
                 _state.value = _state.value.copy(
                     tabs = _state.value.tabs + newTab,
@@ -197,9 +178,6 @@ class BrowserViewModel(
                         activePageTitle = "New Tab"
                     )
                 }
-            }
-            is BrowserIntent.Reload -> {
-                _state.value = _state.value.copy(reloadTrigger = _state.value.reloadTrigger + 1)
             }
             is BrowserIntent.ToggleBackgroundPlay -> {
                 _state.value = _state.value.copy(isBackgroundPlayEnabled = intent.enabled)

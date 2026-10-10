@@ -47,7 +47,22 @@ actual fun PikachuWebView(
                 userContentController.addUserScript(userScript)
             }
         }
+
+        // Inject Background Playback Engine
+        val bgPath = NSBundle.mainBundle.pathForResource("background_playback.bundle", "js")
+        if (bgPath != null) {
+            val bgJs = NSString.stringWithContentsOfFile(bgPath, NSUTF8StringEncoding, null)
+            if (bgJs != null) {
+                val bgScript = WKUserScript(
+                    source = bgJs,
+                    injectionTime = WKUserScriptInjectionTime.WKUserScriptInjectionTimeAtDocumentStart,
+                    forMainFrameOnly = false
+                )
+                userContentController.addUserScript(bgScript)
+            }
+        }
         config.userContentController = userContentController
+        config.allowsInlineMediaPlayback = true
 
         WKWebView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0), configuration = config).apply {
             allowsBackForwardNavigationGestures = true

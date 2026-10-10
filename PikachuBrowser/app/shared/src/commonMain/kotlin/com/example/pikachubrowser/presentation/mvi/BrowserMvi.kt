@@ -13,10 +13,7 @@ data class QuickLink(
 sealed interface BrowserIntent {
     data class LoadUrl(val url: String) : BrowserIntent
     data class SearchQuery(val query: String) : BrowserIntent
-    object GoBack : BrowserIntent
-    object GoForward : BrowserIntent
     object GoHome : BrowserIntent
-    object Reload : BrowserIntent
     data class UrlChanged(val url: String) : BrowserIntent
     data class PageLoaded(val url: String, val title: String) : BrowserIntent
     data class UpdatePageContent(val content: String) : BrowserIntent
@@ -45,7 +42,6 @@ data class BrowserState(
     val isPrivateMode: Boolean = false,
     val isClearSessionOnExitEnabled: Boolean = true,
     val searchEngine: String = "DuckDuckGo",
-    val reloadTrigger: Int = 0,
     val activePageContent: String = "",
     val activePageTitle: String = "",
     val quickLinks: List<QuickLink> = listOf(
@@ -57,6 +53,4 @@ data class BrowserState(
 ) {
     val currentTab: Tab? get() = tabs.find { it.id == activeTabId }
     val currentUrl: String get() = currentTab?.url ?: ""
-    val canGoBack: Boolean get() = (currentTab?.historyIndex ?: 0) > 0
-    val canGoForward: Boolean get() = (currentTab?.historyIndex ?: 0) < ((currentTab?.history?.size ?: 1) - 1)
 }

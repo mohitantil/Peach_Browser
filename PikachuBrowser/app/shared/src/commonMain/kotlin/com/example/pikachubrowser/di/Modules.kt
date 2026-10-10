@@ -45,6 +45,6 @@ val useCaseModule = module {
 }
 
 val viewModelModule = module {
-    factory { com.example.pikachubrowser.presentation.viewmodel.ChatViewModel(get()) }
-    factory { com.example.pikachubrowser.presentation.viewmodel.BrowserViewModel(getOrNull()) }
+    single { com.example.pikachubrowser.presentation.viewmodel.ChatViewModel(get()) }
+    single { com.example.pikachubrowser.presentation.viewmodel.BrowserViewModel(getOrNull()) }
 }

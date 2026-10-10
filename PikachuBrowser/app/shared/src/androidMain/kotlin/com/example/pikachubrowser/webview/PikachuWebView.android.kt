@@ -23,48 +23,30 @@ import com.example.pikachubrowser.presentation.viewmodel.BrowserViewModel
 import com.example.pikachubrowser.util.clearBrowserSession
 import org.koin.compose.koinInject
 
-private const val BACKGROUND_PLAY_JS = """
-(function() {
-    try {
-        if (window.__pikachu_bg_installed) return;
-        window.__pikachu_bg_installed = true;
-
-        Object.defineProperty(document, 'hidden', {
-            get: function() { return false; },
-            configurable: true
-        });
-        Object.defineProperty(document, 'visibilityState', {
-            get: function() { return 'visible'; },
-            configurable: true
-        });
-        Object.defineProperty(document, 'webkitHidden', {
-            get: function() { return false; },
-            configurable: true
-        });
-        Object.defineProperty(document, 'webkitVisibilityState', {
-            get: function() { return 'visible'; },
-            configurable: true
-        });
-
-        ['visibilitychange', 'webkitvisibilitychange', 'blur', 'pagehide'].forEach(function(evt) {
-            window.addEventListener(evt, function(e) {
-                e.stopImmediatePropagation();
-            }, true);
-            document.addEventListener(evt, function(e) {
-                e.stopImmediatePropagation();
-            }, true);
-        });
-
-        var originalPause = HTMLMediaElement.prototype.pause;
-        HTMLMediaElement.prototype.pause = function() {
-            if (document.hidden || !document.hasFocus()) {
-                return;
-            }
-            return originalPause.apply(this, arguments);
-        };
-    } catch(e) {}
-})();
-"""
+private fun loadBackgroundScript(context: Context): String {
+    return try {
+        context.assets.open("background_playback.bundle.js").bufferedReader().use { it.readText() }
+    } catch (e: Exception) {
+        """
+        (function() {
+            try {
+                if (window.__PIKACHU_BG_PLAYBACK_ACTIVE__) return;
+                window.__PIKACHU_BG_PLAYBACK_ACTIVE__ = true;
+                Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+                Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+                Object.defineProperty(document, 'webkitHidden', { get: () => false, configurable: true });
+                Object.defineProperty(document, 'webkitVisibilityState', { get: () => 'visible', configurable: true });
+                document.hasFocus = () => true;
+                Document.prototype.hasFocus = () => true;
+                ['visibilitychange', 'webkitvisibilitychange', 'blur', 'pagehide'].forEach(evt => {
+                    window.addEventListener(evt, e => e.stopImmediatePropagation(), true);
+                    document.addEventListener(evt, e => e.stopImmediatePropagation(), true);
+                });
+            } catch(e) {}
+        })();
+        """.trimIndent()
+    }
+}
 
 class PikachuNativeWebView(context: Context) : WebView(context) {
     var isBackgroundPlayActive: Boolean = false
@@ -76,6 +58,46 @@ class PikachuNativeWebView(context: Context) : WebView(context) {
             return
         }
         super.onWindowVisibilityChanged(visibility)
+    }
+
+    override fun dispatchWindowVisibilityChanged(visibility: Int) {
+        if (isBackgroundPlayActive && (visibility == View.GONE || visibility == View.INVISIBLE)) {
+            super.dispatchWindowVisibilityChanged(View.VISIBLE)
+            return
+        }
+        super.dispatchWindowVisibilityChanged(visibility)
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        if (isBackgroundPlayActive && (visibility == View.GONE || visibility == View.INVISIBLE)) {
+            super.onVisibilityChanged(changedView, View.VISIBLE)
+            return
+        }
+        super.onVisibilityChanged(changedView, visibility)
+    }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        if (isBackgroundPlayActive && !hasWindowFocus) {
+            super.onWindowFocusChanged(true)
+            return
+        }
+        super.onWindowFocusChanged(hasWindowFocus)
+    }
+
+    override fun onPause() {
+        if (isBackgroundPlayActive) {
+            // Do not pause video/audio decoders in background
+            return
+        }
+        super.onPause()
+    }
+
+    override fun pauseTimers() {
+        if (isBackgroundPlayActive) {
+            // Keep JavaScript timers alive for media chunk streaming
+            return
+        }
+        super.pauseTimers()
     }
 }
 
@@ -91,6 +113,7 @@ actual fun PikachuWebView(
     val context = LocalContext.current
     val activity = context as? Activity
 
+    val backgroundScript = remember(context) { loadBackgroundScript(context) }
     var lastLoadedUrl by remember { mutableStateOf<String?>(null) }
 
     AndroidView(
@@ -131,7 +154,7 @@ actual fun PikachuWebView(
                             browserViewModel.processIntent(BrowserIntent.UrlChanged(pageUrl))
                         }
                         if (browserState.isBackgroundPlayEnabled) {
-                            view?.evaluateJavascript(BACKGROUND_PLAY_JS, null)
+                            view?.evaluateJavascript(backgroundScript, null)
                         }
                     }
 
@@ -148,7 +171,7 @@ actual fun PikachuWebView(
                         }
 
                         if (browserState.isBackgroundPlayEnabled) {
-                            view?.evaluateJavascript(BACKGROUND_PLAY_JS, null)
+                            view?.evaluateJavascript(backgroundScript, null)
                         }
 
                         // Extract readable page text for Pikachu AI assistant
@@ -215,7 +238,7 @@ actual fun PikachuWebView(
                     try {
                         WebViewCompat.addDocumentStartJavaScript(
                             this,
-                            BACKGROUND_PLAY_JS,
+                            backgroundScript,
                             setOf("*")
                         )
                     } catch (e: Exception) {
@@ -227,6 +250,9 @@ actual fun PikachuWebView(
         update = { webView ->
             if (webView is PikachuNativeWebView) {
                 webView.isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
+                if (browserState.isBackgroundPlayEnabled) {
+                    webView.evaluateJavascript(backgroundScript, null)
+                }
             }
 
             // Re-bind controller actions on update

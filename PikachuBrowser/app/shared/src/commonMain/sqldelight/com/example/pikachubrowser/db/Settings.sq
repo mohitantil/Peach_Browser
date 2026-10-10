@@ -1,16 +1,16 @@
 CREATE TABLE SettingsEntity (
     key TEXT NOT NULL PRIMARY KEY,
-    value TEXT NOT NULL
+    setting_value TEXT NOT NULL
 );
 
 getSetting:
-SELECT value FROM SettingsEntity WHERE key = ?;
+SELECT setting_value FROM SettingsEntity WHERE key = ?;
 
 getAllSettings:
 SELECT * FROM SettingsEntity;
 
 setSetting:
-INSERT OR REPLACE INTO SettingsEntity(key, value)
+INSERT OR REPLACE INTO SettingsEntity(key, setting_value)
 VALUES (?, ?);
 
 deleteSetting:

@@ -77,3 +77,8 @@
   - Rebuilt `TabsListScreen` into a modern 2-column card grid with tab title and URL tracking.
   - Fixed tab switching and backstack routing across `LandingRoute` and `BrowserRoute`.
   - Created and committed KMP codebase to dedicated `kmp-browser` git branch.
+  - Implemented Brave-grade Background Streaming Engine:
+    - `PikachuMediaService`: Native Android Foreground Service (`FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK`) with low-priority media notification and `PowerManager.PARTIAL_WAKE_LOCK` to keep CPU active under lock screen and background.
+    - `PikachuNativeWebView`: Overrode `onWindowVisibilityChanged`, `dispatchWindowVisibilityChanged`, `onVisibilityChanged`, `onWindowFocusChanged`, `onPause`, and `pauseTimers` to prevent Chromium from freezing media decoders and audio buffers.
+    - `background_playback.bundle.js`: Injected into Android and iOS assets; overrides Page Visibility API (`hidden`, `visibilityState`, `hasFocus`), drops visibility event listeners, intercepts `HTMLMediaElement.pause` to block auto-pauses while honoring manual clicks, and maintains auto-resume watchdog.
+    - Promoted `BrowserViewModel` in Koin `viewModelModule` from `factory` to `single` to share global browser state reliably across `MainActivity`, `App`, and `PikachuWebView`.
