@@ -111,13 +111,14 @@ fun App() {
         var showMenuSheet by remember { mutableStateOf(false) }
 
         // Sync address bar text with active page
-        LaunchedEffect(browserState.activeTabId, browserState.currentUrl, webViewController.currentUrl) {
-            val url = if (webViewController.currentUrl.isNotBlank()) {
+        LaunchedEffect(browserState.activeTabId, browserState.currentUrl, webViewController.currentUrl, isLandingPage) {
+            addressText = if (isLandingPage) {
+                ""
+            } else if (webViewController.currentUrl.isNotBlank()) {
                 webViewController.currentUrl
             } else {
                 browserState.currentUrl
             }
-            addressText = url
         }
 
         // Multiplatform Back Navigation & Backward Swipe Hierarchy
@@ -139,16 +140,19 @@ fun App() {
 
                 // Priority 4: If active tab is at its first web page and was opened from Landing, return to Landing page
                 isCurrentTabOnWeb && activeTab.initialUrl.isBlank() -> {
+                    webViewController.reset()
                     browserViewModel.processIntent(BrowserIntent.GoHome)
                 }
 
                 // Priority 5: If active tab can't go back further, switch to previous tab in MRU tabBackStack
                 hasTabBackHistory -> {
+                    webViewController.reset()
                     browserViewModel.processIntent(BrowserIntent.PopTab)
                 }
 
                 // Priority 6: If on a web page with no tab history, transition back to Landing page
                 isCurrentTabOnWeb -> {
+                    webViewController.reset()
                     browserViewModel.processIntent(BrowserIntent.GoHome)
                 }
 
@@ -254,12 +258,14 @@ fun App() {
                                         // Swipe right: previous tab
                                         val curIdx = browserState.tabs.indexOfFirst { it.id == browserState.activeTabId }
                                         if (curIdx > 0) {
+                                            webViewController.reset()
                                             browserViewModel.processIntent(BrowserIntent.SwitchTab(browserState.tabs[curIdx - 1].id))
                                         }
                                     } else if (bottomBarDrag < -50f) {
                                         // Swipe left: next tab
                                         val curIdx = browserState.tabs.indexOfFirst { it.id == browserState.activeTabId }
                                         if (curIdx != -1 && curIdx < browserState.tabs.size - 1) {
+                                            webViewController.reset()
                                             browserViewModel.processIntent(BrowserIntent.SwitchTab(browserState.tabs[curIdx + 1].id))
                                         }
                                     }
@@ -283,6 +289,7 @@ fun App() {
                             modifier = Modifier
                                 .size(40.dp)
                                 .clickable {
+                                    webViewController.reset()
                                     browserViewModel.processIntent(BrowserIntent.GoHome)
                                     if (isSubScreenOpen) {
                                         navController.navigate(BrowserHomeRoute) {
@@ -397,10 +404,12 @@ fun App() {
                             tabs = browserState.tabs,
                             activeTabId = browserState.activeTabId,
                             onSelectTab = { tabId, _ ->
+                                webViewController.reset()
                                 browserViewModel.processIntent(BrowserIntent.SwitchTab(tabId))
                                 navController.popBackStack()
                             },
                             onNewTab = {
+                                webViewController.reset()
                                 browserViewModel.processIntent(BrowserIntent.AddTab(""))
                                 navController.popBackStack()
                             },

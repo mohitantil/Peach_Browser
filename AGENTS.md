@@ -109,6 +109,12 @@
     - Omitted top address bar entirely on sub-screens (`Settings`, `History`, `Bookmarks`, `Downloads`, `AiSettings`, `TabsList`), eliminating duplicate top bars.
     - Docked top address bar and bottom navigation bar cleanly without nested scroll offsets that previously clipped into the status bar or slid toolbars off-screen.
     - Fixed bottom navigation bar `⌂` Home icon when clicked inside `SettingsScreen` and other sub-screens, popping to `BrowserHomeRoute` and resetting active tab to the home start page.
-    - Added 32dp bottom spacing/padding across all scrollable sub-screens (`SettingsScreen`, `HistoryScreen`, `BookmarksScreen`, `TabsListScreen`, `AiSettingsScreen`) to prevent content from cutting off against the bottom navigation bar.
+  - Resolved WebView Navigation Feedback Loop, Auto-Refresh & Address Bar Flickering (v1.0.1):
+    - Fixed circular dependency between Chromium's internal backstack and ViewModel's `Tab.url`. In `PikachuWebView.android.kt` and `PikachuWebView.ios.kt`, `AndroidView.update` now checks `currentWebUrl == webView.url` and keeps `lastLoadedUrl` synchronized directly with `onPageStarted` and `onPageFinished`, preventing destructive force-reloads on back navigation and link clicks.
+    - Implemented `WebChromeClient.onCreateWindow` with transport WebView and enabled `setSupportMultipleWindows(true)` and `javaScriptCanOpenWindowsAutomatically(true)`, allowing search engine results with `target="_blank"` and `window.open` (such as Brave Search) to open reliably.
+    - Added safe scheme routing in `shouldOverrideUrlLoading` for external intents (`intent://`, `tel:`, `mailto:`).
+    - Added `PikachuWebViewController.reset()` to wipe controller URL, title, and loading state whenever transitioning to the Landing/Home page or switching tabs.
+    - Fixed address bar `LaunchedEffect` in `App.kt` to clear `addressText = ""` whenever on `isLandingPage`, resolving address bar flickering showing stale session URLs (e.g. YouTube).
+    - Cleared `AndroidTabWebViewPool` on cold start in `BrowserViewModel` when `clear_session_on_exit` is active, and released tab WebView on `GoHome`.
 
 

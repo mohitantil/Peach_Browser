@@ -38,6 +38,16 @@ class PikachuWebViewController {
         val target = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
         loadUrlAction?.invoke(target)
     }
+
+    fun reset() {
+        currentUrl = ""
+        currentTitle = ""
+        canGoBack = false
+        canGoForward = false
+        isLoading = false
+        progress = 0f
+        pageContent = ""
+    }
 }
 
 @Composable

@@ -121,7 +121,8 @@ actual fun PikachuWebView(
                     title = view.title ?: ""
                 )
             )
-            if (url.isNotBlank() && url != lastLoadedUrl) {
+            val currentWkUrl = view.URL?.absoluteString ?: ""
+            if (url.isNotBlank() && url != lastLoadedUrl && url != currentWkUrl) {
                 lastLoadedUrl = url
                 val request = NSURLRequest(NSURL(string = url))
                 view.loadRequest(request)

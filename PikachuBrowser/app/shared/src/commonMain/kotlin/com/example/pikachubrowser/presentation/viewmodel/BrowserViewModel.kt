@@ -68,6 +68,7 @@ class BrowserViewModel(
             // If clear session on exit is enabled or private mode is active, clear cookies/storage on startup
             if (clearSession || privateMode) {
                 clearBrowserSession()
+                clearAllTabWebViews()
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -166,6 +167,7 @@ class BrowserViewModel(
                 _state.value = _state.value.copy(activePageContent = intent.content)
             }
             is BrowserIntent.GoHome -> {
+                releaseTabWebView(_state.value.activeTabId)
                 updateCurrentTab { tab ->
                     tab.copy(url = "", title = "New Tab", canGoBack = false, canGoForward = false)
                 }

@@ -2,10 +2,14 @@ package com.example.pikachubrowser.webview
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Message
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -137,7 +141,8 @@ actual fun PikachuWebView(
                     javaScriptEnabled = true
                     domStorageEnabled = !browserState.isPrivateMode
                     databaseEnabled = !browserState.isPrivateMode
-                    setSupportMultipleWindows(false)
+                    setSupportMultipleWindows(true)
+                    javaScriptCanOpenWindowsAutomatically = true
                     allowFileAccess = false
                     mediaPlaybackRequiresUserGesture = false
                     useWideViewPort = true
@@ -161,6 +166,7 @@ actual fun PikachuWebView(
                         controller?.canGoBack = view?.canGoBack() == true
                         controller?.canGoForward = view?.canGoForward() == true
                         if (pageUrl != null) {
+                            lastLoadedUrl = pageUrl
                             controller?.currentUrl = pageUrl
                             browserViewModel.processIntent(BrowserIntent.UrlChanged(pageUrl))
                         }
@@ -188,6 +194,7 @@ actual fun PikachuWebView(
                         controller?.canGoForward = view?.canGoForward() == true
                         val pageTitle = view?.title ?: ""
                         if (pageUrl != null) {
+                            lastLoadedUrl = pageUrl
                             controller?.currentUrl = pageUrl
                             controller?.currentTitle = pageTitle
                             browserViewModel.processIntent(BrowserIntent.PageLoaded(pageUrl, pageTitle))
@@ -224,6 +231,30 @@ actual fun PikachuWebView(
                             }
                         }
                     }
+
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        val reqUrl = request?.url?.toString() ?: return false
+                        return handleUrlLoading(view, reqUrl)
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun shouldOverrideUrlLoading(view: WebView?, reqUrl: String?): Boolean {
+                        if (reqUrl.isNullOrBlank()) return false
+                        return handleUrlLoading(view, reqUrl)
+                    }
+
+                    private fun handleUrlLoading(view: WebView?, reqUrl: String): Boolean {
+                        if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
+                            return false
+                        }
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(reqUrl))
+                            view?.context?.startActivity(intent)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        return true
+                    }
                 }
 
                 webChromeClient = object : WebChromeClient() {
@@ -237,6 +268,42 @@ actual fun PikachuWebView(
                         if (title != null) {
                             controller?.currentTitle = title
                         }
+                    }
+
+                    override fun onCreateWindow(
+                        view: WebView?,
+                        isDialog: Boolean,
+                        isUserGesture: Boolean,
+                        resultMsg: Message?
+                    ): Boolean {
+                        if (resultMsg == null || view == null) return false
+                        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                        val tempWebView = WebView(view.context).apply {
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                                    val targetUrl = request?.url?.toString()
+                                    if (!targetUrl.isNullOrBlank()) {
+                                        lastLoadedUrl = targetUrl
+                                        view.loadUrl(targetUrl)
+                                    }
+                                    v?.destroy()
+                                    return true
+                                }
+
+                                @Deprecated("Deprecated in Java")
+                                override fun shouldOverrideUrlLoading(v: WebView?, targetUrl: String?): Boolean {
+                                    if (!targetUrl.isNullOrBlank()) {
+                                        lastLoadedUrl = targetUrl
+                                        view.loadUrl(targetUrl)
+                                    }
+                                    v?.destroy()
+                                    return true
+                                }
+                            }
+                        }
+                        transport.webView = tempWebView
+                        resultMsg.sendToTarget()
+                        return true
                     }
                 }
 
@@ -325,7 +392,9 @@ actual fun PikachuWebView(
             }
 
             // Only load if the requested URL has changed from what was previously requested
-            if (url.isNotBlank() && url != lastLoadedUrl) {
+            // AND does not match the URL already loaded or currently loading in the WebView!
+            val currentWebUrl = webView.url
+            if (url.isNotBlank() && url != lastLoadedUrl && url != currentWebUrl) {
                 lastLoadedUrl = url
                 webView.loadUrl(url)
             }
