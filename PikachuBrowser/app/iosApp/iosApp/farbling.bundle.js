@@ -1,5 +1,5 @@
 /**
- * Pikachu AI Browser — Brave-Grade Farbling & Anti-Fingerprinting Engine
+ * Pikachu AI Browser — Advanced Farbling & Anti-Fingerprinting Engine
  * Protects against Canvas, WebGL, AudioContext, and Hardware fingerprinting
  * by introducing subtle, deterministic pseudo-random noise per origin & session.
  * Exposes Global Privacy Control (GPC) and Do Not Track (DNT) signals.

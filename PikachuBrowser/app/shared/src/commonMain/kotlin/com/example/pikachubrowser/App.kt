@@ -126,7 +126,7 @@ fun App() {
             addressText = url
         }
 
-        // Brave-Grade Multiplatform Back Navigation & Backward Swipe Hierarchy
+        // Multiplatform Back Navigation & Backward Swipe Hierarchy
         val isBackHandled = isSubScreenOpen || showChatSheet || showMenuSheet || isCurrentTabOnWeb || hasTabBackHistory
 
         CommonBackHandler(enabled = isBackHandled) {
