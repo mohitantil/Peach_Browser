@@ -197,23 +197,53 @@ fun SettingsScreen(
                 shadowElevation = 2.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    val engines = listOf("DuckDuckGo", "Brave", "Google")
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        engines.forEach { engine ->
-                            val isSelected = searchEngine.equals(engine, ignoreCase = true)
-                            FilterChip(
+                Column {
+                    val currentEngine = com.example.pikachubrowser.util.SearchEngine.fromName(searchEngine)
+                    com.example.pikachubrowser.util.SearchEngine.entries.forEachIndexed { index, engine ->
+                        val isSelected = currentEngine == engine
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onIntent(BrowserIntent.SetSearchEngine(engine.id)) }
+                                .background(if (isSelected) Color(0xFFF7F3FC) else Color.White)
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(engine.iconEmoji, fontSize = 20.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = engine.displayName,
+                                        fontSize = 15.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color(0xFF7E57C2) else Color(0xFF1E1E2E),
+                                        fontFamily = FontFamily.SansSerif
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = engine.description,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF757575),
+                                        fontFamily = FontFamily.SansSerif
+                                    )
+                                }
+                            }
+                            RadioButton(
                                 selected = isSelected,
-                                onClick = { onIntent(BrowserIntent.SetSearchEngine(engine)) },
-                                label = { Text(engine, fontFamily = FontFamily.SansSerif, fontSize = 13.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFFE2D6F5),
-                                    selectedLabelColor = Color(0xFF7E57C2)
+                                onClick = { onIntent(BrowserIntent.SetSearchEngine(engine.id)) },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = Color(0xFF7E57C2),
+                                    unselectedColor = Color(0xFFBDBDBD)
                                 )
                             )
+                        }
+                        if (index < com.example.pikachubrowser.util.SearchEngine.entries.size - 1) {
+                            HorizontalDivider(color = Color(0xFFF2F2F2))
                         }
                     }
                 }

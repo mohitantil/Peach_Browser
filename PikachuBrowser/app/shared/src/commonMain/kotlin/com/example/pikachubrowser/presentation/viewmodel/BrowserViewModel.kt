@@ -8,8 +8,11 @@ import com.example.pikachubrowser.domain.model.Tab
 import com.example.pikachubrowser.presentation.mvi.BrowserIntent
 import com.example.pikachubrowser.presentation.mvi.BrowserState
 import com.example.pikachubrowser.presentation.mvi.QuickLink
+import com.example.pikachubrowser.util.SearchEngine
 import com.example.pikachubrowser.util.UrlSanitizer
 import com.example.pikachubrowser.util.clearBrowserSession
+import com.example.pikachubrowser.webview.clearAllTabWebViews
+import com.example.pikachubrowser.webview.releaseTabWebView
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -93,26 +96,31 @@ class BrowserViewModel(
                         url = UrlSanitizer.sanitize(url)
                     }
                     updateCurrentTab { tab ->
-                        tab.copy(url = url)
+                        tab.copy(
+                            url = url,
+                            initialUrl = if (tab.url.isBlank()) url else tab.initialUrl,
+                            lastAccessedAt = currentTimeMillis()
+                        )
                     }
                 }
             }
             is BrowserIntent.SearchQuery -> {
-                var searchUrl = when (_state.value.searchEngine.lowercase()) {
-                    "google" -> "https://www.google.com/search?q=${intent.query.trim()}"
-                    "brave" -> "https://search.brave.com/search?q=${intent.query.trim()}"
-                    else -> "https://html.duckduckgo.com/html/?q=${intent.query.trim()}"
-                }
+                val engine = SearchEngine.fromName(_state.value.searchEngine)
+                var searchUrl = engine.buildSearchUrl(intent.query)
                 if (_state.value.isTrackingProtectionEnabled) {
                     searchUrl = UrlSanitizer.sanitize(searchUrl)
                 }
                 updateCurrentTab { tab ->
-                    tab.copy(url = searchUrl)
+                    tab.copy(
+                        url = searchUrl,
+                        initialUrl = if (tab.url.isBlank()) searchUrl else tab.initialUrl,
+                        lastAccessedAt = currentTimeMillis()
+                    )
                 }
             }
             is BrowserIntent.UrlChanged -> {
                 updateCurrentTab { tab ->
-                    tab.copy(url = intent.url)
+                    tab.copy(url = intent.url, lastAccessedAt = currentTimeMillis())
                 }
             }
             is BrowserIntent.PageLoaded -> {
@@ -120,7 +128,7 @@ class BrowserViewModel(
                 val title = intent.title.ifBlank { url }
                 _state.value = _state.value.copy(activePageTitle = title)
                 updateCurrentTab { tab ->
-                    tab.copy(url = url, title = title)
+                    tab.copy(url = url, title = title, lastAccessedAt = currentTimeMillis())
                 }
                 if (!_state.value.isPrivateMode && url.isNotBlank() && !url.startsWith("about:")) {
                     viewModelScope.launch {
@@ -136,12 +144,30 @@ class BrowserViewModel(
                     }
                 }
             }
+            is BrowserIntent.UpdateTabNavState -> {
+                val currentState = _state.value
+                val updatedTabs = currentState.tabs.map {
+                    if (it.id == intent.tabId) {
+                        it.copy(
+                            canGoBack = intent.canGoBack,
+                            canGoForward = intent.canGoForward,
+                            url = if (intent.url.isNotBlank()) intent.url else it.url,
+                            title = if (intent.title.isNotBlank()) intent.title else it.title
+                        )
+                    } else it
+                }
+                val activeTab = updatedTabs.find { it.id == currentState.activeTabId }
+                _state.value = currentState.copy(
+                    tabs = updatedTabs,
+                    activePageTitle = activeTab?.title ?: currentState.activePageTitle
+                )
+            }
             is BrowserIntent.UpdatePageContent -> {
                 _state.value = _state.value.copy(activePageContent = intent.content)
             }
             is BrowserIntent.GoHome -> {
                 updateCurrentTab { tab ->
-                    tab.copy(url = "", title = "New Tab")
+                    tab.copy(url = "", title = "New Tab", canGoBack = false, canGoForward = false)
                 }
                 _state.value = _state.value.copy(activePageTitle = "New Tab")
             }
@@ -151,46 +177,84 @@ class BrowserViewModel(
                 val newTab = Tab(
                     id = newId,
                     title = initialTitle,
-                    url = intent.url
+                    url = intent.url,
+                    initialUrl = intent.url,
+                    createdAt = currentTimeMillis(),
+                    lastAccessedAt = currentTimeMillis()
                 )
+                val updatedBackStack = _state.value.tabBackStack.filter { it != newId } + newId
                 _state.value = _state.value.copy(
                     tabs = _state.value.tabs + newTab,
                     activeTabId = newTab.id,
+                    tabBackStack = updatedBackStack,
                     activePageTitle = initialTitle
                 )
             }
             is BrowserIntent.SwitchTab -> {
                 val targetTab = _state.value.tabs.find { it.id == intent.tabId }
                 if (targetTab != null) {
+                    val updatedBackStack = _state.value.tabBackStack.filter { it != intent.tabId } + intent.tabId
+                    val updatedTabs = _state.value.tabs.map {
+                        if (it.id == intent.tabId) it.copy(lastAccessedAt = currentTimeMillis()) else it
+                    }
                     _state.value = _state.value.copy(
+                        tabs = updatedTabs,
                         activeTabId = intent.tabId,
+                        tabBackStack = updatedBackStack,
                         activePageTitle = targetTab.title
                     )
                 }
             }
+            is BrowserIntent.PopTab -> {
+                if (_state.value.tabBackStack.size > 1) {
+                    val currentTabId = _state.value.activeTabId
+                    val remainingBackStack = _state.value.tabBackStack.filter { it != currentTabId }
+                    val previousTabId = remainingBackStack.last()
+                    val targetTab = _state.value.tabs.find { it.id == previousTabId }
+                    if (targetTab != null) {
+                        _state.value = _state.value.copy(
+                            activeTabId = previousTabId,
+                            tabBackStack = remainingBackStack,
+                            activePageTitle = targetTab.title
+                        )
+                    }
+                }
+            }
+            is BrowserIntent.CloseCurrentTab -> {
+                processIntent(BrowserIntent.CloseTab(_state.value.activeTabId))
+            }
             is BrowserIntent.CloseTab -> {
+                releaseTabWebView(intent.tabId)
                 val remainingTabs = _state.value.tabs.filter { it.id != intent.tabId }
+                val remainingBackStack = _state.value.tabBackStack.filter { it != intent.tabId }
+
                 if (remainingTabs.isNotEmpty()) {
                     val nextActiveId = if (_state.value.activeTabId == intent.tabId) {
-                        remainingTabs.last().id
+                        remainingBackStack.lastOrNull() ?: remainingTabs.last().id
                     } else {
                         _state.value.activeTabId
                     }
+                    val finalBackStack = if (remainingBackStack.isNotEmpty()) remainingBackStack else listOf(nextActiveId)
                     val nextActiveTab = remainingTabs.find { it.id == nextActiveId }
                     _state.value = _state.value.copy(
                         tabs = remainingTabs,
                         activeTabId = nextActiveId,
+                        tabBackStack = finalBackStack,
                         activePageTitle = nextActiveTab?.title ?: "New Tab"
                     )
                 } else {
                     val defaultTab = Tab(
                         id = "tab_${currentTimeMillis()}_1",
                         title = "New Tab",
-                        url = ""
+                        url = "",
+                        initialUrl = "",
+                        createdAt = currentTimeMillis(),
+                        lastAccessedAt = currentTimeMillis()
                     )
                     _state.value = _state.value.copy(
                         tabs = listOf(defaultTab),
                         activeTabId = defaultTab.id,
+                        tabBackStack = listOf(defaultTab.id),
                         activePageTitle = "New Tab"
                     )
                 }
@@ -232,6 +296,7 @@ class BrowserViewModel(
             }
             is BrowserIntent.ClearAllBrowsingData -> {
                 clearBrowserSession()
+                clearAllTabWebViews()
                 viewModelScope.launch {
                     try {
                         database?.historyQueries?.clearAllHistory()

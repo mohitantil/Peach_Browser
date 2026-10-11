@@ -111,6 +111,7 @@ class PikachuNativeWebView(context: Context) : WebView(context) {
 
 @Composable
 actual fun PikachuWebView(
+    tabId: String,
     url: String,
     controller: PikachuWebViewController?,
     modifier: Modifier
@@ -123,12 +124,13 @@ actual fun PikachuWebView(
 
     val backgroundScript = remember(context) { loadBackgroundScript(context) }
     val farblingScript = remember(context) { loadFarblingScript(context) }
-    var lastLoadedUrl by remember { mutableStateOf<String?>(null) }
+    var lastLoadedUrl by remember(tabId) { mutableStateOf<String?>(null) }
 
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            PikachuNativeWebView(ctx).apply {
+            AndroidTabWebViewPool.getOrCreate(tabId, ctx) { c ->
+                PikachuNativeWebView(c).apply {
                 isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
                 isNestedScrollingEnabled = true
                 settings.apply {
@@ -162,6 +164,15 @@ actual fun PikachuWebView(
                             controller?.currentUrl = pageUrl
                             browserViewModel.processIntent(BrowserIntent.UrlChanged(pageUrl))
                         }
+                        browserViewModel.processIntent(
+                            BrowserIntent.UpdateTabNavState(
+                                tabId = tabId,
+                                canGoBack = view?.canGoBack() == true,
+                                canGoForward = view?.canGoForward() == true,
+                                url = pageUrl ?: "",
+                                title = view?.title ?: ""
+                            )
+                        )
                         if (browserState.isFarblingEnabled && farblingScript.isNotBlank()) {
                             view?.evaluateJavascript(farblingScript, null)
                         }
@@ -181,6 +192,15 @@ actual fun PikachuWebView(
                             controller?.currentTitle = pageTitle
                             browserViewModel.processIntent(BrowserIntent.PageLoaded(pageUrl, pageTitle))
                         }
+                        browserViewModel.processIntent(
+                            BrowserIntent.UpdateTabNavState(
+                                tabId = tabId,
+                                canGoBack = view?.canGoBack() == true,
+                                canGoForward = view?.canGoForward() == true,
+                                url = pageUrl ?: "",
+                                title = pageTitle
+                            )
+                        )
 
                         if (browserState.isFarblingEnabled && farblingScript.isNotBlank()) {
                             view?.evaluateJavascript(farblingScript, null)
@@ -277,6 +297,7 @@ actual fun PikachuWebView(
                     }
                 }
             }
+            }
         },
         update = { webView ->
             if (webView is PikachuNativeWebView) {
@@ -288,6 +309,10 @@ actual fun PikachuWebView(
                     webView.evaluateJavascript(backgroundScript, null)
                 }
             }
+
+            // Sync controller states on update
+            controller?.canGoBack = webView.canGoBack()
+            controller?.canGoForward = webView.canGoForward()
 
             // Re-bind controller actions on update
             controller?.goBackAction = { if (webView.canGoBack()) webView.goBack() }

@@ -88,3 +88,21 @@
     - `farbling.bundle.js`: Injected at `document-start` into Android WebView and iOS WKWebView (`WKUserScript`). Injects deterministic per-origin and per-session pseudo-random micro-noise into Canvas (`toDataURL`, `getImageData`), AudioContext (`getChannelData`, `getFloatFrequencyData`), and WebGL vendor/renderer parameters to neutralize fingerprinting (e.g. FingerprintJS). Emits `Sec-GPC: 1` and `DNT: 1` signals.
     - `SettingsScreen.kt`: Added user toggles for Tracking Query Filter, Fingerprinting Farbler, and De-AMPing, persisted via SQLDelight.
     - `ChatDrawer.kt`: Updated Pikachu AI assistant window with an elegant banner: *"This feature is currently not available. We will make it available soon."*
+- **2026-10-11**:
+  - Overhauled Tab Management and Multiplatform Backstack & Backward Swipe Architecture (Brave-Grade):
+    - Replaced destructive `NavHost` route bouncing (`LandingRoute` vs `BrowserRoute`) with unified `BrowserHomeRoute` holding persistent tab-driven state.
+    - Implemented `AndroidTabWebViewPool` and `IosTabWebViewPool` caching WebViews per tab (`TabManager.kt` expect/actual). Retains WebBackForwardList, scroll position, DOM state, and navigation history across tab switching with zero network reload.
+    - Added `tabBackStack: List<String>` (MRU history) in `BrowserState` and intents `PopTab`, `UpdateTabNavState`, `CloseCurrentTab`.
+    - Enforced Brave-grade 6-priority back navigation hierarchy in `CommonBackHandler`:
+      1. Dismiss active sheets (Chat, Menu).
+      2. Pop sub-screens (Settings, TabsList, Bookmarks, History).
+      3. Navigate back within current tab's active WebView history (`webViewController.goBack()`).
+      4. If at root of web history in tab started from Landing, return to tab Landing page (`GoHome`).
+      5. Switch to previous tab in MRU `tabBackStack` (`PopTab`).
+      6. System back cleans up and minimizes/exits app without abrupt jumping to default tab.
+    - Added horizontal drag gesture to bottom navbar to swipe left/right between open tabs.
+  - Implemented Default Search Engine Flexibility:
+    - Added `SearchEngineUtil.kt` supporting `DuckDuckGo`, `Google`, `Brave Search`, and `Bing` with unified query encoding and persistent SQLite storage.
+    - Replaced hardcoded DuckDuckGo URLs in address bar and landing page with dynamic engine resolution.
+    - Overhauled `SettingsScreen.kt` with a sleek, Figma-quality radio selection card for all 4 search engines.
+

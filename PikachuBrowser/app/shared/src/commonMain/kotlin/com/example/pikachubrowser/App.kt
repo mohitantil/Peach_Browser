@@ -2,6 +2,7 @@ package com.example.pikachubrowser
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,12 +10,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -26,7 +27,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.toRoute
 import com.example.pikachubrowser.presentation.mvi.BrowserIntent
 import com.example.pikachubrowser.presentation.viewmodel.BrowserViewModel
 import com.example.pikachubrowser.presentation.viewmodel.ChatViewModel
@@ -40,6 +40,7 @@ import com.example.pikachubrowser.ui.screens.downloads.DownloadsScreen
 import com.example.pikachubrowser.ui.screens.history.HistoryScreen
 import com.example.pikachubrowser.ui.screens.settings.SettingsScreen
 import com.example.pikachubrowser.ui.screens.tabs.TabsListScreen
+import com.example.pikachubrowser.util.SearchEngine
 import com.example.pikachubrowser.util.rememberShareLauncher
 import com.example.pikachubrowser.webview.PikachuWebView
 import com.example.pikachubrowser.webview.rememberPikachuWebViewController
@@ -48,10 +49,7 @@ import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 
 @Serializable
-object LandingRoute
-
-@Serializable
-data class BrowserRoute(val url: String)
+object BrowserHomeRoute
 
 @Serializable
 object TabsListRoute
@@ -104,8 +102,13 @@ fun App() {
         val navController = rememberNavController()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
-        val isLandingPage = currentDestination?.route?.contains("LandingRoute") ?: true
-        val isBrowserPage = currentDestination?.route?.contains("BrowserRoute") ?: false
+        val isSubScreenOpen = currentDestination?.route != null && !currentDestination.route!!.contains("BrowserHomeRoute")
+
+        val activeTab = browserState.currentTab
+        val isLandingPage = (activeTab == null || activeTab.url.isBlank()) && !isSubScreenOpen
+        val isCurrentTabOnWeb = activeTab != null && activeTab.url.isNotBlank() && !isSubScreenOpen
+        val canGoBackInWebView = webViewController.canGoBack
+        val hasTabBackHistory = browserState.tabBackStack.size > 1
 
         var addressText by remember { mutableStateOf("") }
         val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -114,39 +117,48 @@ fun App() {
         var showMenuSheet by remember { mutableStateOf(false) }
 
         // Sync address bar text with active page
-        LaunchedEffect(navBackStackEntry, webViewController.currentUrl) {
-            val route = currentDestination?.route
-            if (route != null && route.contains("BrowserRoute")) {
-                if (webViewController.currentUrl.isNotBlank()) {
-                    addressText = webViewController.currentUrl
-                } else {
-                    val urlIndex = route.indexOf("url=")
-                    if (urlIndex != -1) {
-                        val urlEnd = route.indexOf("}", urlIndex)
-                        if (urlEnd != -1) {
-                            addressText = route.substring(urlIndex + 4, urlEnd)
-                        }
-                    }
-                }
+        LaunchedEffect(browserState.activeTabId, browserState.currentUrl, webViewController.currentUrl) {
+            val url = if (webViewController.currentUrl.isNotBlank()) {
+                webViewController.currentUrl
             } else {
-                addressText = ""
+                browserState.currentUrl
             }
+            addressText = url
         }
 
-        // Hardware Back Button Handling with clean tab backstack tracking
-        CommonBackHandler(enabled = true) {
-            if (isBrowserPage) {
-                if (webViewController.canGoBack) {
+        // Brave-Grade Multiplatform Back Navigation & Backward Swipe Hierarchy
+        val isBackHandled = isSubScreenOpen || showChatSheet || showMenuSheet || isCurrentTabOnWeb || hasTabBackHistory
+
+        CommonBackHandler(enabled = isBackHandled) {
+            when {
+                // Priority 1: Dismiss active modal bottom sheets
+                showChatSheet -> showChatSheet = false
+                showMenuSheet -> showMenuSheet = false
+
+                // Priority 2: Pop sub-screens (Settings, TabsList, Bookmarks, History, Downloads, AiSettings)
+                isSubScreenOpen -> navController.popBackStack()
+
+                // Priority 3: Navigate backward through WebView page history within active tab
+                isCurrentTabOnWeb && canGoBackInWebView -> {
                     webViewController.goBack()
-                } else {
-                    // Navigate to Home Landing page for this tab
-                    browserViewModel.processIntent(BrowserIntent.GoHome)
-                    navController.navigate(LandingRoute) {
-                        popUpTo(LandingRoute) { inclusive = true }
-                    }
                 }
-            } else if (!isLandingPage) {
-                navController.popBackStack()
+
+                // Priority 4: If active tab is at its first web page and was opened from Landing, return to Landing page
+                isCurrentTabOnWeb && activeTab.initialUrl.isBlank() -> {
+                    browserViewModel.processIntent(BrowserIntent.GoHome)
+                }
+
+                // Priority 5: If active tab can't go back further, switch to previous tab in MRU tabBackStack
+                hasTabBackHistory -> {
+                    browserViewModel.processIntent(BrowserIntent.PopTab)
+                }
+
+                // Priority 6: If on a web page with no tab history, transition back to Landing page
+                isCurrentTabOnWeb -> {
+                    browserViewModel.processIntent(BrowserIntent.GoHome)
+                }
+
+                // Otherwise, system back minimizes/exits app cleanly without crashing
             }
         }
 
@@ -249,11 +261,12 @@ fun App() {
                                         if (input.contains(".") && !input.contains(" ")) {
                                             val url = if (!input.startsWith("http://") && !input.startsWith("https://")) "https://$input" else input
                                             browserViewModel.processIntent(BrowserIntent.LoadUrl(url))
-                                            navController.navigate(BrowserRoute(url))
+                                            webViewController.loadUrl(url)
                                         } else {
-                                            val searchUrl = "https://html.duckduckgo.com/html/?q=$input"
+                                            val engine = SearchEngine.fromName(browserState.searchEngine)
+                                            val searchUrl = engine.buildSearchUrl(input)
                                             browserViewModel.processIntent(BrowserIntent.SearchQuery(input))
-                                            navController.navigate(BrowserRoute(searchUrl))
+                                            webViewController.loadUrl(searchUrl)
                                         }
                                     }
                                 }
@@ -263,13 +276,38 @@ fun App() {
                 }
             },
             bottomBar = {
-                // Sleek, modern bottom navbar without useless arrow buttons
+                // Sleek, modern bottom navbar with horizontal drag gesture to switch tabs
+                var bottomBarDrag by remember { mutableFloatStateOf(0f) }
+
                 Surface(
                     color = Color.White,
                     shadowElevation = 12.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .offset { IntOffset(x = 0, y = bottomBarOffsetHeightPx.roundToInt()) }
+                        .pointerInput(browserState.activeTabId, browserState.tabs) {
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { _, delta ->
+                                    bottomBarDrag += delta
+                                },
+                                onDragEnd = {
+                                    if (bottomBarDrag > 50f) {
+                                        // Swipe right: previous tab
+                                        val curIdx = browserState.tabs.indexOfFirst { it.id == browserState.activeTabId }
+                                        if (curIdx > 0) {
+                                            browserViewModel.processIntent(BrowserIntent.SwitchTab(browserState.tabs[curIdx - 1].id))
+                                        }
+                                    } else if (bottomBarDrag < -50f) {
+                                        // Swipe left: next tab
+                                        val curIdx = browserState.tabs.indexOfFirst { it.id == browserState.activeTabId }
+                                        if (curIdx != -1 && curIdx < browserState.tabs.size - 1) {
+                                            browserViewModel.processIntent(BrowserIntent.SwitchTab(browserState.tabs[curIdx + 1].id))
+                                        }
+                                    }
+                                    bottomBarDrag = 0f
+                                }
+                            )
+                        }
                 ) {
                     Row(
                         modifier = Modifier
@@ -279,7 +317,7 @@ fun App() {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1. Home Button
+                        // 1. Home Button: cleanly navigates active tab to Landing page
                         Surface(
                             shape = CircleShape,
                             color = if (isLandingPage) Color(0xFFE2D6F5) else Color.Transparent,
@@ -287,9 +325,6 @@ fun App() {
                                 .size(40.dp)
                                 .clickable {
                                     browserViewModel.processIntent(BrowserIntent.GoHome)
-                                    navController.navigate(LandingRoute) {
-                                        popUpTo(LandingRoute) { inclusive = true }
-                                    }
                                 }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -297,7 +332,7 @@ fun App() {
                             }
                         }
 
-                        // 2. Center Sleek '✨ Pikachu AI' Action Button
+                        // 2. Center Sleek '✨ Ask AI' Action Button
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = Color(0xFFF2EDFA),
@@ -362,53 +397,40 @@ fun App() {
             ) {
                 NavHost(
                     navController = navController,
-                    startDestination = LandingRoute
+                    startDestination = BrowserHomeRoute
                 ) {
-                    composable<LandingRoute> {
-                        LandingPage(
-                            quickLinks = browserState.quickLinks,
-                            onNavigate = { intent ->
-                                browserViewModel.processIntent(intent)
-                                if (intent is BrowserIntent.LoadUrl) {
-                                    var u = intent.url
-                                    if (!u.startsWith("http://") && !u.startsWith("https://")) u = "https://$u"
-                                    navController.navigate(BrowserRoute(u))
-                                } else if (intent is BrowserIntent.SearchQuery) {
-                                    val searchUrl = "https://html.duckduckgo.com/html/?q=${intent.query}"
-                                    navController.navigate(BrowserRoute(searchUrl))
+                    composable<BrowserHomeRoute> {
+                        val currentTab = browserState.currentTab
+                        val tabUrl = currentTab?.url ?: ""
+                        if (tabUrl.isBlank()) {
+                            LandingPage(
+                                quickLinks = browserState.quickLinks,
+                                onNavigate = { intent ->
+                                    browserViewModel.processIntent(intent)
                                 }
+                            )
+                        } else {
+                            key(currentTab?.id ?: "tab_1") {
+                                PikachuWebView(
+                                    tabId = currentTab?.id ?: "tab_1",
+                                    url = tabUrl,
+                                    controller = webViewController,
+                                    modifier = Modifier.fillMaxSize()
+                                )
                             }
-                        )
-                    }
-                    composable<BrowserRoute> { backStackEntry ->
-                        val route = backStackEntry.toRoute<BrowserRoute>()
-                        PikachuWebView(
-                            url = route.url,
-                            controller = webViewController,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        }
                     }
                     composable<TabsListRoute> {
                         TabsListScreen(
                             tabs = browserState.tabs,
                             activeTabId = browserState.activeTabId,
-                            onSelectTab = { tabId, url ->
+                            onSelectTab = { tabId, _ ->
                                 browserViewModel.processIntent(BrowserIntent.SwitchTab(tabId))
-                                if (url.isNotBlank()) {
-                                    navController.navigate(BrowserRoute(url)) {
-                                        popUpTo(LandingRoute) { inclusive = false }
-                                    }
-                                } else {
-                                    navController.navigate(LandingRoute) {
-                                        popUpTo(LandingRoute) { inclusive = true }
-                                    }
-                                }
+                                navController.popBackStack()
                             },
                             onNewTab = {
                                 browserViewModel.processIntent(BrowserIntent.AddTab(""))
-                                navController.navigate(LandingRoute) {
-                                    popUpTo(LandingRoute) { inclusive = true }
-                                }
+                                navController.popBackStack()
                             },
                             onCloseTab = { tabId ->
                                 browserViewModel.processIntent(BrowserIntent.CloseTab(tabId))
@@ -435,7 +457,7 @@ fun App() {
                             onOpenUrl = { url ->
                                 navController.popBackStack()
                                 browserViewModel.processIntent(BrowserIntent.LoadUrl(url))
-                                navController.navigate(BrowserRoute(url))
+                                webViewController.loadUrl(url)
                             },
                             onNavigateBack = { navController.popBackStack() }
                         )
@@ -447,7 +469,7 @@ fun App() {
                             onOpenUrl = { url ->
                                 navController.popBackStack()
                                 browserViewModel.processIntent(BrowserIntent.LoadUrl(url))
-                                navController.navigate(BrowserRoute(url))
+                                webViewController.loadUrl(url)
                             },
                             onNavigateBack = { navController.popBackStack() }
                         )

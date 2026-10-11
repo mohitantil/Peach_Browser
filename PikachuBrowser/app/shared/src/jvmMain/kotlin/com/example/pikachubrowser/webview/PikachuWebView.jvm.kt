@@ -8,12 +8,13 @@ import androidx.compose.ui.Modifier
 
 @Composable
 actual fun PikachuWebView(
+    tabId: String,
     url: String,
     controller: PikachuWebViewController?,
     modifier: Modifier
 ) {
     // Desktop KCEF implementation placeholder
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Text("Desktop WebView Loading: $url")
+        Text("Desktop WebView Loading: $url (Tab: $tabId)")
     }
 }
