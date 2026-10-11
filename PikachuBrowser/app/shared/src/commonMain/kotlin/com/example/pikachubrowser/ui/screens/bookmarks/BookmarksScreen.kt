@@ -103,7 +103,7 @@ fun BookmarksScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 12.dp)
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp)
                 ) {
                     items(bookmarks, key = { it.id }) { item ->
                         Surface(

@@ -10,17 +10,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
@@ -162,49 +156,14 @@ fun App() {
             }
         }
 
-        // Nested Scroll Connection for Auto-Hiding Toolbars
-        val density = LocalDensity.current
-        val topBarHeight = 56.dp
-        val bottomBarHeight = 54.dp
-        val topBarHeightPx = with(density) { topBarHeight.roundToPx().toFloat() }
-        val bottomBarHeightPx = with(density) { bottomBarHeight.roundToPx().toFloat() }
-
-        var topBarOffsetHeightPx by remember { mutableFloatStateOf(0f) }
-        var bottomBarOffsetHeightPx by remember { mutableFloatStateOf(0f) }
-
-        val nestedScrollConnection = remember(isLandingPage) {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    if (isLandingPage) return Offset.Zero
-                    val delta = available.y
-                    val newTopOffset = topBarOffsetHeightPx + delta
-                    topBarOffsetHeightPx = newTopOffset.coerceIn(-topBarHeightPx, 0f)
-
-                    val newBottomOffset = bottomBarOffsetHeightPx - delta
-                    bottomBarOffsetHeightPx = newBottomOffset.coerceIn(0f, bottomBarHeightPx)
-
-                    return Offset.Zero
-                }
-            }
-        }
-
-        LaunchedEffect(isLandingPage) {
-            if (isLandingPage) {
-                topBarOffsetHeightPx = 0f
-                bottomBarOffsetHeightPx = 0f
-            }
-        }
-
         Scaffold(
-            modifier = Modifier.nestedScroll(nestedScrollConnection),
             topBar = {
-                Surface(
-                    color = Color.White,
-                    shadowElevation = if (isLandingPage) 0.dp else 4.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = topBarOffsetHeightPx.roundToInt()) }
-                ) {
+                if (!isSubScreenOpen) {
+                    Surface(
+                        color = Color.White,
+                        shadowElevation = if (isLandingPage) 0.dp else 4.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -274,6 +233,7 @@ fun App() {
                         )
                     }
                 }
+            }
             },
             bottomBar = {
                 // Sleek, modern bottom navbar with horizontal drag gesture to switch tabs
@@ -284,7 +244,6 @@ fun App() {
                     shadowElevation = 12.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = bottomBarOffsetHeightPx.roundToInt()) }
                         .pointerInput(browserState.activeTabId, browserState.tabs) {
                             detectHorizontalDragGestures(
                                 onHorizontalDrag = { _, delta ->
@@ -320,15 +279,21 @@ fun App() {
                         // 1. Home Button: cleanly navigates active tab to Landing page
                         Surface(
                             shape = CircleShape,
-                            color = if (isLandingPage) Color(0xFFE2D6F5) else Color.Transparent,
+                            color = if (isLandingPage && !isSubScreenOpen) Color(0xFFE2D6F5) else Color.Transparent,
                             modifier = Modifier
                                 .size(40.dp)
                                 .clickable {
                                     browserViewModel.processIntent(BrowserIntent.GoHome)
+                                    if (isSubScreenOpen) {
+                                        navController.navigate(BrowserHomeRoute) {
+                                            popUpTo(BrowserHomeRoute) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                    }
                                 }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("⌂", fontSize = 24.sp, color = if (isLandingPage) Color(0xFF7E57C2) else Color(0xFF555555))
+                                Text("⌂", fontSize = 24.sp, color = if (isLandingPage && !isSubScreenOpen) Color(0xFF7E57C2) else Color(0xFF555555))
                             }
                         }
 
@@ -362,7 +327,11 @@ fun App() {
                             color = Color(0xFFF2EDFA),
                             modifier = Modifier
                                 .size(30.dp)
-                                .clickable { navController.navigate(TabsListRoute) }
+                                .clickable {
+                                    if (currentDestination?.route?.contains("TabsListRoute") != true) {
+                                        navController.navigate(TabsListRoute)
+                                    }
+                                }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
@@ -393,7 +362,10 @@ fun App() {
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.White)
-                    .padding(paddingValues)
+                    .padding(
+                        top = if (isSubScreenOpen) 0.dp else paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding()
+                    )
             ) {
                 NavHost(
                     navController = navController,

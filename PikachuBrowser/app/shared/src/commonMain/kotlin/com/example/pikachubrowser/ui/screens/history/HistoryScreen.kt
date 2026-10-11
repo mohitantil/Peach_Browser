@@ -126,7 +126,7 @@ fun HistoryScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp)
                 ) {
                     items(filteredItems, key = { it.id }) { item ->
                         Surface(

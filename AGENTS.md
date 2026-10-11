@@ -43,10 +43,10 @@
      - Priority 2: Return to tab's start page (`LandingRoute`).
      - Priority 3: Sub-screen pop (`navController.popBackStack()`).
      - Priority 4: Clean app exit.
-5. **Scroll Behavior & Toolbar Auto-Hiding**:
-   - Scaffold uses `NestedScrollConnection` reacting to WebView scrolling deltas (`isNestedScrollingEnabled = true`).
-   - Scrolling down slides Top Bar and Bottom Bar off-screen to award 100% vertical screen estate to web pages.
-   - Scrolling up instantly snaps bars back into view. Bars stay permanently fixed on `LandingRoute`.
+5. **Rock-Solid Docked Toolbars & Clean Scaffolding**:
+   - The top address bar is strictly rendered only on the browser home route (`BrowserHomeRoute`), and completely omitted on sub-screens.
+   - Toolbars remain cleanly docked without erratic off-screen translation or status bar clipping, ensuring instant one-tap access to URL and controls.
+   - All sub-screens (`Settings`, `History`, `Bookmarks`, `Downloads`, `AiSettings`, `TabsList`) have their own native `TopAppBar` with status bar padding and generous 32dp bottom spacing so content is never cut off by the navigation bar.
 6. **AI Context Awareness**:
    - WebView JavaScript extraction automatically pulls `document.title`, `window.location.href`, and `document.body.innerText`.
    - Context is piped into `ChatDrawer` and `ChatViewModel`, displaying live connection status and providing ground-truth website context to the LLM.
@@ -89,11 +89,11 @@
     - `SettingsScreen.kt`: Added user toggles for Tracking Query Filter, Fingerprinting Farbler, and De-AMPing, persisted via SQLDelight.
     - `ChatDrawer.kt`: Updated Pikachu AI assistant window with an elegant banner: *"This feature is currently not available. We will make it available soon."*
 - **2026-10-11**:
-  - Overhauled Tab Management and Multiplatform Backstack & Backward Swipe Architecture (Brave-Grade):
+  - Overhauled Tab Management and Multiplatform Backstack & Backward Swipe Architecture:
     - Replaced destructive `NavHost` route bouncing (`LandingRoute` vs `BrowserRoute`) with unified `BrowserHomeRoute` holding persistent tab-driven state.
     - Implemented `AndroidTabWebViewPool` and `IosTabWebViewPool` caching WebViews per tab (`TabManager.kt` expect/actual). Retains WebBackForwardList, scroll position, DOM state, and navigation history across tab switching with zero network reload.
     - Added `tabBackStack: List<String>` (MRU history) in `BrowserState` and intents `PopTab`, `UpdateTabNavState`, `CloseCurrentTab`.
-    - Enforced Brave-grade 6-priority back navigation hierarchy in `CommonBackHandler`:
+    - Enforced 6-priority back navigation hierarchy in `CommonBackHandler`:
       1. Dismiss active sheets (Chat, Menu).
       2. Pop sub-screens (Settings, TabsList, Bookmarks, History).
       3. Navigate back within current tab's active WebView history (`webViewController.goBack()`).
@@ -105,4 +105,10 @@
     - Added `SearchEngineUtil.kt` supporting `DuckDuckGo`, `Google`, `Brave Search`, and `Bing` with unified query encoding and persistent SQLite storage.
     - Replaced hardcoded DuckDuckGo URLs in address bar and landing page with dynamic engine resolution.
     - Overhauled `SettingsScreen.kt` with a sleek, Figma-quality radio selection card for all 4 search engines.
+  - Resolved UI Inconsistencies, Double Scaffolding, and Off-Screen Toolbar Glitches:
+    - Omitted top address bar entirely on sub-screens (`Settings`, `History`, `Bookmarks`, `Downloads`, `AiSettings`, `TabsList`), eliminating duplicate top bars.
+    - Docked top address bar and bottom navigation bar cleanly without nested scroll offsets that previously clipped into the status bar or slid toolbars off-screen.
+    - Fixed bottom navigation bar `⌂` Home icon when clicked inside `SettingsScreen` and other sub-screens, popping to `BrowserHomeRoute` and resetting active tab to the home start page.
+    - Added 32dp bottom spacing/padding across all scrollable sub-screens (`SettingsScreen`, `HistoryScreen`, `BookmarksScreen`, `TabsListScreen`, `AiSettingsScreen`) to prevent content from cutting off against the bottom navigation bar.
+
 
