@@ -102,6 +102,10 @@
         // 7. Intercept HTMLMediaElement.prototype.pause
         const originalPause = HTMLMediaElement.prototype.pause;
         HTMLMediaElement.prototype.pause = function() {
+            if (this.__peach_sleep_timer_paused) {
+                // Sleep timer requested pause
+                return originalPause.apply(this, arguments);
+            }
             if (isUserInteracting) {
                 // Legitimate user pause via UI button
                 this.__peach_user_paused = true;
@@ -111,11 +115,31 @@
             this.__peach_user_paused = false;
         };
 
-        // 8. Auto-Resume Watchdog: if a media element was playing and got paused without user intent, resume it
+        // 8. Sleep Timer App-Level Pause Bridge
+        window.__PEACH_PAUSE_ALL_MEDIA__ = function() {
+            try {
+                const mediaElements = document.querySelectorAll('video, audio');
+                mediaElements.forEach(media => {
+                    media.__peach_sleep_timer_paused = true;
+                    media.__peach_user_paused = true;
+                    media.__peach_was_playing = false;
+                    try {
+                        originalPause.apply(media);
+                    } catch (e) {}
+                });
+            } catch (err) {
+                console.error('[Peach] Error in __PEACH_PAUSE_ALL_MEDIA__:', err);
+            }
+        };
+
+        // 9. Auto-Resume Watchdog: if a media element was playing and got paused without user intent, resume it
         setInterval(() => {
             try {
                 const videos = document.querySelectorAll('video, audio');
                 videos.forEach(media => {
+                    if (media.__peach_sleep_timer_paused) {
+                        return; // Sleep timer explicitly paused this media — DO NOT resume
+                    }
                     if (media.__peach_was_playing && media.paused && !media.__peach_user_paused && !isUserInteracting) {
                         const playPromise = media.play();
                         if (playPromise !== undefined) {

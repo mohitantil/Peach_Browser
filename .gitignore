@@ -56,8 +56,8 @@ wheels/
 Thumbs.db
 
 # Documentation / Reference guides
-src/ui/animejs_guide.md
-src/ui/basictoadv.md
+**/animejs_guide.md
+**/basictoadv.md
 futurePlan.md
 
 # KMP build caches and machine-specific configs
@@ -65,3 +65,11 @@ futurePlan.md
 **/build/
 PikachuBrowser/local.properties
 PikachuBrowser/.kotlin/
+PeachBrowser/local.properties
+PeachBrowser/.kotlin/
+
+# Refactoring scripts (kept away from git and kmp)
+refactor_project.py
+refactor_tools/
+**/refactor_project.py
+Peach-Python/tools/

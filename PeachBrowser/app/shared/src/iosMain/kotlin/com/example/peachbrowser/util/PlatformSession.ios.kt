@@ -15,6 +15,9 @@ actual fun clearBrowserSession() {
     }
 }
 
+actual fun stopPlatformMediaService() {
+}
+
 actual fun exitBrowserApp() {
     try {
         clearBrowserSession()
@@ -23,3 +26,4 @@ actual fun exitBrowserApp() {
         e.printStackTrace()
     }
 }
+

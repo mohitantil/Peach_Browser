@@ -487,7 +487,26 @@ actual fun PeachWebView(
                     hideCustomViewIfShowing()
                 }
                 controller?.pauseMediaAction = {
-                    evaluateJavascript("if (window.__PEACH_PAUSE_ALL_MEDIA__) window.__PEACH_PAUSE_ALL_MEDIA__(); else document.querySelectorAll('audio, video').forEach(function(el){ el.pause(); });", null)
+                    post {
+                        evaluateJavascript(
+                            """
+                            (function() {
+                                if (window.__PEACH_PAUSE_ALL_MEDIA__) {
+                                    window.__PEACH_PAUSE_ALL_MEDIA__();
+                                } else {
+                                    document.querySelectorAll('audio, video').forEach(function(el) {
+                                        try {
+                                            el.__peach_sleep_timer_paused = true;
+                                            el.__peach_user_paused = true;
+                                            el.pause();
+                                        } catch(e) {}
+                                    });
+                                }
+                            })();
+                            """.trimIndent(),
+                            null
+                        )
+                    }
                 }
 
                 // Wire controller actions to this native WebView
@@ -572,7 +591,26 @@ actual fun PeachWebView(
                     webView.hideCustomViewIfShowing()
                 }
                 controller?.pauseMediaAction = {
-                    webView.evaluateJavascript("if (window.__PEACH_PAUSE_ALL_MEDIA__) window.__PEACH_PAUSE_ALL_MEDIA__(); else document.querySelectorAll('audio, video').forEach(function(el){ el.pause(); });", null)
+                    webView.post {
+                        webView.evaluateJavascript(
+                            """
+                            (function() {
+                                if (window.__PEACH_PAUSE_ALL_MEDIA__) {
+                                    window.__PEACH_PAUSE_ALL_MEDIA__();
+                                } else {
+                                    document.querySelectorAll('audio, video').forEach(function(el) {
+                                        try {
+                                            el.__peach_sleep_timer_paused = true;
+                                            el.__peach_user_paused = true;
+                                            el.pause();
+                                        } catch(e) {}
+                                    });
+                                }
+                            })();
+                            """.trimIndent(),
+                            null
+                        )
+                    }
                 }
                 webView.isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
                 if (browserState.isFarblingEnabled && farblingScript.isNotBlank()) {

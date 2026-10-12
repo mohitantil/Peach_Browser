@@ -150,3 +150,10 @@
       1. Fixed `ForegroundServiceDidNotStartInTimeException`: called `startForegroundPlayback()` immediately in `PeachMediaService.onCreate()` and added `isAudioPlaying` guard in `MainActivity.onPause()`.
       2. Fixed `MissingResourceException`: placed `peach_hero.jpg` into `peachbrowser.app.shared.generated.resources` within `androidApp/src/main/assets` and verified Compose multiplatform resource generation.
     - Successfully built and installed on connected physical device with live execution verified.
+  - Python Workspace Separation & Isolated Refactor Tools:
+    - Moved legacy desktop Python browser implementation into dedicated `Peach-Python/` directory.
+    - Preserved `refactor_project.py` script in `refactor_tools/` outside Git tracking and isolated from KMP.
+  - Resolved Sleep Timer Background Pause & Expiration:
+    - Added `window.__PEACH_PAUSE_ALL_MEDIA__` bridge and `__peach_sleep_timer_paused` flag in `background_playback.bundle.js` preventing background auto-pause blocker and watchdog from overriding sleep timer pauses.
+    - Wrapped `pauseMediaAction` execution in main looper `post { ... }` in `PeachWebView.android.kt`.
+    - Added `stopPlatformMediaService()` expect/actual stopping foreground service notification and wake lock when sleep timer pauses audio or when exiting app.

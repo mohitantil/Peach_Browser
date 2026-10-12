@@ -16,6 +16,7 @@ import com.example.peachbrowser.util.SearchEngine
 import com.example.peachbrowser.util.UrlSanitizer
 import com.example.peachbrowser.util.clearBrowserSession
 import com.example.peachbrowser.util.exitBrowserApp
+import com.example.peachbrowser.util.stopPlatformMediaService
 import com.example.peachbrowser.webview.clearAllTabWebViews
 import com.example.peachbrowser.webview.releaseTabWebView
 import kotlinx.coroutines.Job
@@ -455,6 +456,7 @@ class BrowserViewModel(
             SleepTimerAction.PAUSE_PLAYBACK -> {
                 _state.value = _state.value.copy(isAudioPlaying = false)
                 onPausePlaybackAction?.invoke()
+                stopPlatformMediaService()
             }
             SleepTimerAction.CLOSE_TAB -> {
                 processIntent(BrowserIntent.CloseCurrentTab)
