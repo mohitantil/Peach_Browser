@@ -141,6 +141,12 @@
     - Handled via `WebChromeClient.onPermissionRequest` on Android and WKWebView permission handlers on iOS.
     - Instant auto-purge on page navigation (`onPageStarted`), tab closure (`CloseTab`), or app exit (`onDestroy`).
     - Ongoing notification indicator alert (`🔴 Microphone/Camera in use by [origin]`).
-  - Implemented Native Download Manager & Notifications:
-    - Integrated Android `DownloadManager` and iOS notification center with progress and completion notifications.
-    - Built rich `DownloadsScreen.kt` with live download cards, completion statuses, and one-tap access to device downloads folder (`openDownloadsFolder()`).
+  - Completed Full Project and Namespace Refactoring (`PeachBrowser`):
+    - Renamed root directory to `PeachBrowser` in the repository and committed cleanly.
+    - Updated package namespaces from `com.example.pikachubrowser` to `com.example.peachbrowser` across all modules (`:app:androidApp`, `:app:shared`, `:app:desktopApp`, `:app:iosApp`, `:core`, `:server`).
+    - Renamed database to `PeachDatabase` (`com.example.peachbrowser.db`) in SQLDelight.
+    - Renamed classes (`PeachApplication`, `PeachMediaService`, `PeachWebView`, `PeachWebViewController`, `PeachNativeWebView`).
+    - Resolved App Launch Crash:
+      1. Fixed `ForegroundServiceDidNotStartInTimeException`: called `startForegroundPlayback()` immediately in `PeachMediaService.onCreate()` and added `isAudioPlaying` guard in `MainActivity.onPause()`.
+      2. Fixed `MissingResourceException`: placed `peach_hero.jpg` into `peachbrowser.app.shared.generated.resources` within `androidApp/src/main/assets` and verified Compose multiplatform resource generation.
+    - Successfully built and installed on connected physical device with live execution verified.

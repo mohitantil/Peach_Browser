@@ -25,9 +25,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        // If background playback is enabled, start the foreground service before entering background
+        // If background playback is enabled AND media is actually streaming, start the foreground service
         try {
-            if (browserViewModel.state.value.isBackgroundPlayEnabled) {
+            if (browserViewModel.state.value.isBackgroundPlayEnabled && browserViewModel.state.value.isAudioPlaying) {
                 PeachMediaService.start(this)
             }
         } catch (e: Exception) {
