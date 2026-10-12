@@ -1,10 +1,10 @@
 /**
- * Pikachu AI Browser — Advanced Farbling & Anti-Fingerprinting Engine
+ * Peach AI Browser — Advanced Farbling & Anti-Fingerprinting Engine
  * Protects against Canvas, WebGL, AudioContext, and Hardware fingerprinting
  * by introducing subtle, deterministic pseudo-random noise per origin & session.
  * Exposes Global Privacy Control (GPC) and Do Not Track (DNT) signals.
  */
-(function initPikachuFarbler() {
+(function initPeachFarbler() {
     'use strict';
 
     if (window.__PIKACHU_FARBLER_ACTIVE__) {
@@ -50,7 +50,7 @@
         } catch (e) {}
 
         // ─── 3. DETERMINISTIC ORIGIN SEED GENERATOR ──────────────────────────────
-        const originStr = window.location.host || 'pikachu.browser';
+        const originStr = window.location.host || 'peach.browser';
         let seed = 0;
         for (let i = 0; i < originStr.length; i++) {
             seed = ((seed << 5) - seed) + originStr.charCodeAt(i);
@@ -128,7 +128,7 @@
             proto.getParameter = function(pname) {
                 // UNMASKED_VENDOR_WEBGL
                 if (pname === 0x9245) {
-                    return 'Google Inc. (Pikachu Browser)';
+                    return 'Google Inc. (Peach Browser)';
                 }
                 // UNMASKED_RENDERER_WEBGL
                 if (pname === 0x9246) {
@@ -145,8 +145,8 @@
             hookWebGL(WebGL2RenderingContext.prototype);
         }
 
-        console.log('[Pikachu] Farbling and Global Privacy Control shield active.');
+        console.log('[Peach] Farbling and Global Privacy Control shield active.');
     } catch (e) {
-        console.error('[Pikachu] Farbling initialization exception:', e);
+        console.error('[Peach] Farbling initialization exception:', e);
     }
 })();

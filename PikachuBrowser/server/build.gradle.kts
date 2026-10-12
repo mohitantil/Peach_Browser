@@ -4,10 +4,10 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
-group = "com.example.pikachubrowser"
+group = "com.example.peachbrowser"
 version = "1.0.0"
 application {
-    mainClass = "com.example.pikachubrowser.ApplicationKt"
+    mainClass = "com.example.peachbrowser.ApplicationKt"
 }
 
 dependencies {

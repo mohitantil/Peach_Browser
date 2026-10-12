@@ -12,7 +12,7 @@ kotlin {
     jvm()
     
     android {
-       namespace = "com.example.pikachubrowser.core"
+       namespace = "com.example.peachbrowser.core"
        compileSdk = libs.versions.android.compileSdk.get().toInt()
        minSdk = libs.versions.android.minSdk.get().toInt()
     

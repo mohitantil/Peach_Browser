@@ -22,11 +22,11 @@ dependencies {
 }
 
 android {
-    namespace = "com.example.pikachubrowser"
+    namespace = "com.example.peachbrowser"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.example.pikachubrowser"
+        applicationId = "com.example.peachbrowser"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

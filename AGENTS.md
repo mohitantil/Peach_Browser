@@ -116,5 +116,31 @@
     - Added `PikachuWebViewController.reset()` to wipe controller URL, title, and loading state whenever transitioning to the Landing/Home page or switching tabs.
     - Fixed address bar `LaunchedEffect` in `App.kt` to clear `addressText = ""` whenever on `isLandingPage`, resolving address bar flickering showing stale session URLs (e.g. YouTube).
     - Cleared `AndroidTabWebViewPool` on cold start in `BrowserViewModel` when `clear_session_on_exit` is active, and released tab WebView on `GoHome`.
-
-
+- **2026-10-12**:
+  - Rebranding to "Peach Browser":
+    - Replaced copyrighted Pikachu branding and mascot asset with a 3D clay-style peach portrait featuring pastel gradient coloring (`peach_hero.jpg` in `composeResources/drawable`).
+    - Updated UI headers, strings, AI assistant prompt, and metadata across `LandingPage`, `MenuOverlay`, `TabsListScreen`, `AiSettingsScreen`, `ChatDrawer`, `ChatViewModel`, and `strings.xml`.
+  - Implemented Fullscreen & Landscape Video Engine (Android WebView):
+    - Added `android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"` to `MainActivity` in `AndroidManifest.xml` to prevent activity recreation and video reloads on device rotation.
+    - Implemented `WebChromeClient.onShowCustomView` and `onHideCustomView` in `PikachuWebView.android.kt`, mounting Chromium's video player into a black fullscreen overlay decor view.
+    - Added immersive system bar hiding (`WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`) and automatic switch to `ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE` for edge-to-edge landscape viewing.
+    - Integrated priority 0 back navigation handling in `CommonBackHandler` and `PikachuWebViewController` to smoothly dismiss custom view fullscreen on back button or gesture, restoring portrait orientation and system bars.
+    - Formulated comprehensive end-to-end plan for folder and package namespace refactoring (`PikachuBrowser` -> `PeachBrowser`).
+  - Implemented Clock-Synced Music & Video Sleep Timer Engine (Android & iOS):
+    - `MediaDetector.kt`: Domain detector matching YouTube Music, YouTube, Spotify, Gaana, JioSaavn, Apple Music, SoundCloud, Pandora, Tidal, Deezer, etc.
+    - `media_detector.bundle.js`: Real-time media output detector injected into Android & iOS WebViews inspecting audio/video elements and MediaSession playback status. Emits state via `PeachNativeBridge` and `webkit.messageHandlers.peachMedia`.
+    - `SleepTimerSheet.kt`: Material3 modal sheet supporting 15m, 30m, 45m, 60m presets and custom duration inputs.
+    - Wall-Clock Sync: Countdown driven by `targetEndTimeMillis` preventing ticker drift when device is locked or backgrounded.
+    - Configurable Expiration Actions:
+      - Pause Playback: Invokes `pauseMedia()` Javascript bridge across all active media elements without terminating the tab.
+      - Close Tab: Smoothly closes the streaming tab.
+      - Close Browser: Triggers `exitBrowserApp()` invoking Android `Activity.finishAffinity()` / iOS clean exit.
+    - Sleek Floating Pill Button: Positioned above bottom navigation bar when streaming audio or while sleep timer is active with live countdown ticker. Also accessible via 3-dots Menu.
+  - Implemented Ephemeral Sensor Permissions (Microphone & Camera):
+    - Strict session-based RAM storage (`SessionPermissionManager.kt`), never persisted to database or disk.
+    - Handled via `WebChromeClient.onPermissionRequest` on Android and WKWebView permission handlers on iOS.
+    - Instant auto-purge on page navigation (`onPageStarted`), tab closure (`CloseTab`), or app exit (`onDestroy`).
+    - Ongoing notification indicator alert (`🔴 Microphone/Camera in use by [origin]`).
+  - Implemented Native Download Manager & Notifications:
+    - Integrated Android `DownloadManager` and iOS notification center with progress and completion notifications.
+    - Built rich `DownloadsScreen.kt` with live download cards, completion statuses, and one-tap access to device downloads folder (`openDownloadsFolder()`).

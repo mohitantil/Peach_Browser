@@ -1,4 +1,4 @@
-rootProject.name = "PikachuBrowser"
+rootProject.name = "PeachBrowser"
 
 pluginManagement {
     repositories {

@@ -1,9 +1,9 @@
 /**
- * Pikachu AI Browser — True Background Playback Engine
+ * Peach AI Browser — True Background Playback Engine
  * Bypasses Page Visibility API, Fullscreen API, document.hidden, window.blur,
  * and suppresses automatic background pausing on YouTube, Vimeo, and media streaming sites.
  */
-(function initPikachuBackgroundPlayback() {
+(function initPeachBackgroundPlayback() {
     'use strict';
 
     if (window.__PIKACHU_BG_PLAYBACK_ACTIVE__) {
@@ -104,11 +104,11 @@
         HTMLMediaElement.prototype.pause = function() {
             if (isUserInteracting) {
                 // Legitimate user pause via UI button
-                this.__pikachu_user_paused = true;
+                this.__peach_user_paused = true;
                 return originalPause.apply(this, arguments);
             }
             // Background auto-pause attempted by page scripts
-            this.__pikachu_user_paused = false;
+            this.__peach_user_paused = false;
         };
 
         // 8. Auto-Resume Watchdog: if a media element was playing and got paused without user intent, resume it
@@ -116,14 +116,14 @@
             try {
                 const videos = document.querySelectorAll('video, audio');
                 videos.forEach(media => {
-                    if (media.__pikachu_was_playing && media.paused && !media.__pikachu_user_paused && !isUserInteracting) {
+                    if (media.__peach_was_playing && media.paused && !media.__peach_user_paused && !isUserInteracting) {
                         const playPromise = media.play();
                         if (playPromise !== undefined) {
                             playPromise.catch(() => {});
                         }
                     } else if (!media.paused) {
-                        media.__pikachu_was_playing = true;
-                        media.__pikachu_user_paused = false;
+                        media.__peach_was_playing = true;
+                        media.__peach_user_paused = false;
                     }
                 });
             } catch (e) {}
@@ -139,6 +139,6 @@
         }, 15000);
 
     } catch (e) {
-        console.error('[Pikachu] Background playback initialization error:', e);
+        console.error('[Peach] Background playback initialization error:', e);
     }
 })();

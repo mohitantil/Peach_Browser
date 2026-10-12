@@ -1,5 +1,5 @@
 /**
- * Pikachu AI Browser — Privacy Shield & Ad Neutralizer Engine
+ * Peach AI Browser — Privacy Shield & Ad Neutralizer Engine
  * Written in strict TypeScript for bulletproof DOM & YouTube player manipulation.
  */
 
@@ -41,7 +41,7 @@
  
 
 // ─── INITIALIZATION GUARD ───────────────────────────────────────────────────
-(function initPikachuShield()       {
+(function initPeachShield()       {
     'use strict';
 
     if (window.__PIKACHU_SHIELD_ACTIVE__) {
@@ -49,7 +49,7 @@
     }
     window.__PIKACHU_SHIELD_ACTIVE__ = true;
 
-    console.log('[PikachuShield] TypeScript Shield initialized');
+    console.log('[PeachShield] TypeScript Shield initialized');
 
     // ─── 1. UNIVERSAL COSMETIC CSS FILTERING ─────────────────────────────────
     const COSMETIC_STYLES         = `
@@ -122,13 +122,13 @@
 
     function injectCosmeticCSS()          {
         try {
-            if (document.getElementById('pikachu-shield-css')) {
+            if (document.getElementById('peach-shield-css')) {
                 return true;
             }
             const target                     = document.head || document.documentElement;
             if (target) {
                 const styleEl                   = document.createElement('style');
-                styleEl.id = 'pikachu-shield-css';
+                styleEl.id = 'peach-shield-css';
                 styleEl.textContent = COSMETIC_STYLES;
                 target.appendChild(styleEl);
                 return true;

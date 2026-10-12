@@ -17,11 +17,11 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.example.pikachubrowser.MainKt"
+        mainClass = "com.example.peachbrowser.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.example.pikachubrowser"
+            packageName = "com.example.peachbrowser"
             packageVersion = "1.0.0"
         }
     }

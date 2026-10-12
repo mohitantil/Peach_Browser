@@ -23,7 +23,7 @@ kotlin {
     jvm()
     
     androidLibrary {
-        namespace = "com.example.pikachubrowser.app.shared"
+        namespace = "com.example.peachbrowser.app.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
         
@@ -83,8 +83,8 @@ dependencies {
 
 sqldelight {
     databases {
-        create("PikachuDatabase") {
-            packageName.set("com.example.pikachubrowser.db")
+        create("PeachDatabase") {
+            packageName.set("com.example.peachbrowser.db")
         }
     }
 }
