@@ -1,5 +1,6 @@
 package com.example.peachbrowser.webview
 
+import android.Manifest
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.Context
@@ -20,6 +21,8 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -88,6 +91,8 @@ class PeachNativeWebView(context: Context) : WebView(context) {
     var customViewContainer: FrameLayout? = null
     var originalOrientation: Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     var onFullscreenChanged: ((Boolean) -> Unit)? = null
+    var onPermissionRequestHandler: ((PermissionRequest) -> Unit)? = null
+    var onPermissionRequestCanceledHandler: ((PermissionRequest) -> Unit)? = null
 
     fun hideCustomViewIfShowing() {
         val cv = customView ?: return
@@ -236,12 +241,81 @@ actual fun PeachWebView(
     val mediaDetectorScript = remember(context) { loadMediaDetectorScript(context) }
     var lastLoadedUrl by remember(tabId) { mutableStateOf<String?>(null) }
 
+    var pendingPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val pendingReq = pendingPermissionRequest
+        if (pendingReq != null) {
+            val allGranted = permissions.isNotEmpty() && permissions.entries.all { it.value }
+            if (allGranted) {
+                val originStr = pendingReq.origin.toString()
+                val resources = pendingReq.resources
+                SessionPermissionManager.grantResources(tabId, originStr, resources)
+                try {
+                    pendingReq.grant(resources)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            } else {
+                try {
+                    pendingReq.deny()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            pendingPermissionRequest = null
+        }
+    }
+
+    val handlePermissionRequest: (PermissionRequest) -> Unit = { request ->
+        val originStr = request.origin.toString()
+        if (SessionPermissionManager.hasAllResources(tabId, originStr, request.resources)) {
+            try {
+                request.grant(request.resources)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        } else {
+            pendingPermissionRequest = request
+            val requiredOsPermissions = mutableListOf<String>()
+            for (res in request.resources) {
+                if (res == PermissionRequest.RESOURCE_VIDEO_CAPTURE) {
+                    requiredOsPermissions.add(Manifest.permission.CAMERA)
+                } else if (res == PermissionRequest.RESOURCE_AUDIO_CAPTURE) {
+                    requiredOsPermissions.add(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+
+            if (requiredOsPermissions.isNotEmpty()) {
+                permissionLauncher.launch(requiredOsPermissions.toTypedArray())
+            } else {
+                SessionPermissionManager.grantResources(tabId, originStr, request.resources)
+                try {
+                    request.grant(request.resources)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                pendingPermissionRequest = null
+            }
+        }
+    }
+
+    val handlePermissionRequestCanceled: (PermissionRequest) -> Unit = { request ->
+        if (pendingPermissionRequest == request) {
+            pendingPermissionRequest = null
+        }
+    }
+
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
             AndroidTabWebViewPool.getOrCreate(tabId, ctx) { c ->
                 PeachNativeWebView(c).apply {
-                isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
+                    onPermissionRequestHandler = handlePermissionRequest
+                    onPermissionRequestCanceledHandler = handlePermissionRequestCanceled
+                    isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
                 isNestedScrollingEnabled = true
                 settings.apply {
                     javaScriptEnabled = true
@@ -427,22 +501,9 @@ actual fun PeachWebView(
 
                     override fun onPermissionRequest(request: PermissionRequest?) {
                         if (request == null) return
-                        val originStr = request.origin.toString()
-                        val resources = request.resources
-                        val grantedResources = mutableListOf<String>()
-
-                        for (res in resources) {
-                            if (res == PermissionRequest.RESOURCE_AUDIO_CAPTURE) {
-                                SessionPermissionManager.grantPermission(tabId, originStr, SensorType.MICROPHONE)
-                                grantedResources.add(res)
-                            } else if (res == PermissionRequest.RESOURCE_VIDEO_CAPTURE) {
-                                SessionPermissionManager.grantPermission(tabId, originStr, SensorType.CAMERA)
-                                grantedResources.add(res)
-                            }
-                        }
-
-                        if (grantedResources.isNotEmpty()) {
-                            request.grant(grantedResources.toTypedArray())
+                        val handler = onPermissionRequestHandler
+                        if (handler != null) {
+                            handler(request)
                         } else {
                             request.deny()
                         }
@@ -450,6 +511,7 @@ actual fun PeachWebView(
 
                     override fun onPermissionRequestCanceled(request: PermissionRequest?) {
                         if (request != null) {
+                            onPermissionRequestCanceledHandler?.invoke(request)
                             SessionPermissionManager.revokeSitePermissions(tabId, request.origin.toString())
                         }
                     }
@@ -646,6 +708,8 @@ actual fun PeachWebView(
     },
     update = { webView ->
         if (webView is PeachNativeWebView) {
+                webView.onPermissionRequestHandler = handlePermissionRequest
+                webView.onPermissionRequestCanceledHandler = handlePermissionRequestCanceled
                 webView.onFullscreenChanged = { isFullscreen ->
                     controller?.isCustomViewShowing = isFullscreen
                 }
@@ -716,6 +780,12 @@ actual fun PeachWebView(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             AndroidTabWebViewPool.get(tabId)?.hideCustomViewIfShowing()
+            try {
+                pendingPermissionRequest?.deny()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            pendingPermissionRequest = null
             SessionPermissionManager.clearTabPermissions(tabId)
             if (activity?.isFinishing == true && (browserState.isClearSessionOnExitEnabled || browserState.isPrivateMode)) {
                 clearBrowserSession()

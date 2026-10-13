@@ -48,8 +48,10 @@ object AndroidTabWebViewPool {
 
 actual fun releaseTabWebView(tabId: String) {
     AndroidTabWebViewPool.remove(tabId)
+    com.example.peachbrowser.util.SessionPermissionManager.clearTabPermissions(tabId)
 }
 
 actual fun clearAllTabWebViews() {
     AndroidTabWebViewPool.clearAll()
+    com.example.peachbrowser.util.SessionPermissionManager.clearAllPermissions()
 }

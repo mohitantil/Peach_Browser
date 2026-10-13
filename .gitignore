@@ -66,6 +66,7 @@ futurePlan.md
 # KMP build caches and machine-specific configs
 **/.gradle/
 **/build/
+**/bin/
 **/.kotlin/
 **/local.properties
 PeachBrowser/local.properties

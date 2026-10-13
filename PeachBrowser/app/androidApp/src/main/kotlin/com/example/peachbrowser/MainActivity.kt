@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         try {
             PeachMediaService.stop(this)
+            com.example.peachbrowser.util.SessionPermissionManager.clearAllPermissions()
             if (isFinishing && (browserViewModel.state.value.isClearSessionOnExitEnabled || browserViewModel.state.value.isPrivateMode)) {
                 browserViewModel.resetToCleanSession()
             }

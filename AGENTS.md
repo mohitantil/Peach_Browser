@@ -167,10 +167,11 @@
     - Added `BrowserIntent.ResetToCleanSession` and `resetToCleanSession()` in `BrowserViewModel`: clears all tab WebViews from pool, invokes `clearBrowserSession()`, and resets `tabs` back to a clean initial Landing state.
     - Added clean session reset guard in `MainActivity.onCreate()` and `onDestroy()`: ensures reopening the browser from background or warm cache starts fresh on the Landing page when `clear_session_on_exit` is active.
     - Implemented `onTaskRemoved()` in `PeachMediaService`: releases wake locks and stops foreground service when app task is swiped from Android Recents.
-  - Eliminated Legacy Branding Remnants & Optimized Project:
-    - Renamed JavaScript injection flags from `__PIKACHU_*__` to `__PEACH_*__` across Android and iOS assets (`background_playback.bundle.js`, `privacy_shield.bundle.js`, `farbling.bundle.js`).
-    - Updated iOS Xcode project configs (`Config.xcconfig`, `project.pbxproj`) from `PikachuBrowser` to `PeachBrowser`.
-    - Completely deleted obsolete root directory `PikachuBrowser/` using robocopy to bypass long-path limits.
-    - Removed duplicate `refactor_project.py` at root and streamlined `.gitignore`.
-    - Renamed and updated skill references (`peach-browser-dev`, `peach-kmp-architecture`).
+  - Resolved WebRTC Camera & Microphone Permissions (`NotReadableError` Fix):
+    - Root Cause Resolved: Intercepted `WebChromeClient.onPermissionRequest`, pausing the request instead of auto-granting before Android OS permissions were verified, which previously caused Chromium hardware initialization failure (`NotReadableError`).
+    - Synchronized OS & WebView Permissions: Integrated `rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions())` in `PeachWebView.android.kt`. Mapped WebKit resources (`RESOURCE_VIDEO_CAPTURE` -> `CAMERA`, `RESOURCE_AUDIO_CAPTURE` -> `RECORD_AUDIO`).
+    - Strict Ephemeral In-Memory Storage: Enhanced `SessionPermissionManager.kt` with `activeTabResources` (`mutableMapOf`). Checks `hasAllResources()` per tab and origin with zero disk or database persistence.
+    - User Prompt Lifecycle: Prompts user via native Android 15 permission dialog ("Only this time" / "While using the app" / "Don't allow"). On grant, caches resources in volatile tab memory and invokes `request.grant()`. On deny, calls `request.deny()`.
+    - Strict Multi-Level Revocation: Automatically purges memory upon page navigation (`onPageStarted`), tab closure (`releaseTabWebView`), tab unmount (`onDispose`), and process termination (`MainActivity.onDestroy()`).
+    - Added `<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />` and non-required camera/mic hardware features in `AndroidManifest.xml`.
 
