@@ -1,7 +1,7 @@
 """
 src/core/privacy_shield.py
 
-Brave-Grade Privacy Shield for Pikachu Browser.
+Brave-Grade Privacy Shield for Peach Browser.
 Two-layer defense architecture modeled after Brave Browser's adblock-rust + scriptlets:
 
 Layer 1 — Network Request Interceptor:
@@ -329,7 +329,7 @@ def setup_privacy_shield(profile: QWebEngineProfile, parent=None):
     shield_code = get_privacy_shield_script()
     if shield_code:
         script = QWebEngineScript()
-        script.setName("PikachuPrivacyShield")
+        script.setName("PeachPrivacyShield")
         script.setSourceCode(shield_code)
         script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
         script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)

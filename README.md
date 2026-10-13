@@ -1,8 +1,8 @@
-# ⚡ Pikachu Browser
+# 🍑 Peach Browser
 
 > **Agentic Web & Research Browser with TypeScript-Engineered Privacy Shield & Local Metasearch**
 
-![Pikachu Browser Banner](src/ui/assets/icons/pikachu-logo.svg)
+![Peach Browser Banner](src/ui/assets/icons/pikachu-logo.svg)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6%20%2F%20QtWebEngine-green.svg)](https://wiki.qt.io/Qt_for_Python)
@@ -14,7 +14,7 @@
 
 ## 🌟 Overview
 
-**Pikachu Browser** is an editorial, privacy-first desktop web browser built with **Python (PySide6 / QtWebEngine)** and a high-speed **TypeScript privacy engine**. Designed specifically for deep research and ad-free browsing, Pikachu combines:
+**Peach Browser** is an editorial, privacy-first web browser built with **Kotlin Multiplatform (Android & iOS)** and a desktop research implementation in **Python (PySide6 / QtWebEngine)**. Designed specifically for deep research, ad-free browsing, and background streaming, Peach combines:
 
 1. **Zero-Ad Experience**: Brave-grade network request filtering combined with a TypeScript-compiled procedural scriptlet that neutralizes video ads (including YouTube pre-rolls and mid-rolls) and strips tracking pixels.
 2. **Ephemeral Privacy by Default ("Shred on Close")**: Every window runs in an off-the-record profile. Cookies, caches, and visited links exist only in memory and are shredded on exit. Passwords are never saved or suggested.
@@ -26,7 +26,7 @@
 
 ## 🛡️ Privacy & Ad-Blocking Architecture
 
-Pikachu Browser employs a **dual-layer defense system**:
+Peach Browser employs a **dual-layer defense system**:
 
 ```
                          Incoming Web Traffic
@@ -133,7 +133,7 @@ Copy `.env.example` to `.env`:
 copy .env.example .env
 ```
 
-Pikachu Browser works immediately for ad-free browsing using local defaults. To unlock the full agentic AI capabilities, configure your API keys in `.env`:
+Peach Browser works immediately for ad-free browsing using local defaults. To unlock the full agentic AI capabilities, configure your API keys in `.env`:
 
 | Variable | Provider / Purpose | Free Tier Link | Priority |
 | :--- | :--- | :--- | :--- |
@@ -181,7 +181,7 @@ node src/scripts/build.mjs
 
 ---
 
-#### Step 5: Launch Pikachu Browser
+#### Step 5: Launch Peach Browser
 ```powershell
 .\.venv\Scripts\python.exe app.py
 ```
@@ -191,7 +191,7 @@ node src/scripts/build.mjs
 ## 📁 Project Structure
 
 ```
-Pikachu_Browser/
+PeachBrowser/
 ├── app.py                      # Application launcher & Qt loop
 ├── settings.yml                # SearXNG configuration (port 8888, JSON API enabled)
 ├── requirements.txt            # Python dependencies (PySide6, ChromaDB, httpx, etc.)

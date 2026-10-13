@@ -45,6 +45,7 @@ sealed interface BrowserIntent {
     data class LoadUrl(val url: String) : BrowserIntent
     data class SearchQuery(val query: String) : BrowserIntent
     object GoHome : BrowserIntent
+    object ResetToCleanSession : BrowserIntent
     data class UrlChanged(val url: String) : BrowserIntent
     data class PageLoaded(val url: String, val title: String) : BrowserIntent
     data class UpdatePageContent(val content: String) : BrowserIntent

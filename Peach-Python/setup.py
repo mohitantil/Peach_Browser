@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pikachu AI Browser — Automated 1-Click Setup Runner
+Peach AI Browser — Automated 1-Click Setup Runner
 Reads 'setup.yaml' and provisions all dependencies, environment,
 TypeScript bundle, and SearXNG Docker container in one step.
 """
@@ -17,7 +17,7 @@ YAML_SPEC = ROOT_DIR / "setup.yaml"
 
 def print_banner():
     print("=" * 60)
-    print(" ⚡ Pikachu Browser — 1-Click Automated Setup Runner")
+    print(" ⚡ Peach Browser — 1-Click Automated Setup Runner")
     print("=" * 60)
 
 
@@ -74,7 +74,7 @@ def step_setup_env():
 
     # Interactive / Guided walk-through
     print("\n  --- 🔑 Environment Key Setup Guide ---")
-    print("  Pikachu Browser works out-of-the-box for ad-free browsing with local defaults.")
+    print("  Peach Browser works out-of-the-box for ad-free browsing with local defaults.")
     print("  To activate the AI research assistant and live intelligence, obtain free API keys:\n")
 
     keys_guide = [
@@ -158,7 +158,7 @@ def main():
     step_check_searxng_container()
 
     print("\n" + "=" * 60)
-    print(" ✅ Setup complete! You can now start Pikachu Browser with:")
+    print(" ✅ Setup complete! You can now start Peach Browser with:")
     print("    python app.py")
     print("=" * 60)
 

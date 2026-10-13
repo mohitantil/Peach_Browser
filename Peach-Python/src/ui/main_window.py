@@ -144,13 +144,13 @@ class AgenticDocBrowser(QMainWindow):
         self.search_box.setClearButtonEnabled(True)
         self.search_box.returnPressed.connect(self.execute_web_search)
 
-        # Pikachu Assistant Drawer Toggle
-        self.btn_toggle_drawer = QPushButton("Pikachu AI Assistant")
-        self.btn_toggle_drawer.setObjectName("pikachuToggleBtn")
+        # Peach Assistant Drawer Toggle
+        self.btn_toggle_drawer = QPushButton("Peach AI Assistant")
+        self.btn_toggle_drawer.setObjectName("peachToggleBtn")
         self.btn_toggle_drawer.setIcon(self._get_icon("agent.svg"))
         self.btn_toggle_drawer.clicked.connect(self.toggle_drawer)
 
-        # Assemble Toolbar (Navigation controls + Address Bar + Web Search Box + Pikachu Assistant)
+        # Assemble Toolbar (Navigation controls + Address Bar + Web Search Box + Peach Assistant)
         self.toolbar.addWidget(self.btn_back)
         self.toolbar.addWidget(self.btn_forward)
         self.toolbar.addWidget(self.btn_reload)
@@ -290,7 +290,7 @@ class AgenticDocBrowser(QMainWindow):
             self.drawer.set_status("SearXNG Web Search Engine active.")
             return
         if url.startswith("file://") and ("home.html" in url or "assets" in url):
-            self.drawer.set_status("Welcome to Pikachu Browser · Ready")
+            self.drawer.set_status("Welcome to Peach Browser · Ready")
             return
 
         if self.indexer_worker and self.indexer_worker.isRunning():

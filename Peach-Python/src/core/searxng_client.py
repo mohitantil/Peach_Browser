@@ -12,12 +12,12 @@ logger = logging.getLogger("SearchClient")
 
 class ResilientSearchClient:
     """
-    Unified, failure-resistant search client for Pikachu AI Browser.
+    Unified, failure-resistant search client for Peach AI Browser.
     - Primary Search Engine: Local SearXNG instance (http://localhost:8080/search).
     - Default Backup Search Engine: Tavily Search API (https://api.tavily.com/search).
     
     If SearXNG is offline, unreachable, rate-limited, or returns 0 results,
-    the client seamlessly cascades to Tavily Search so AI Agent Pikachu
+    the client seamlessly cascades to Tavily Search so AI Agent Peach
     never fails to answer web research questions.
     """
 
@@ -148,7 +148,7 @@ class ResilientSearchClient:
     def verify_with_tavily(self, query: str, max_results: int = 5, max_chars_per_summary: int = 250, timeout: float = 8.0) -> dict:
         """
         Fetches top 5 results from Tavily with strictly 250-character summaries
-        for cross-verifying pre-digested intelligence before Pikachu AI answers.
+        for cross-verifying pre-digested intelligence before Peach AI answers.
         """
         if not self.tavily_api_key:
             return {
@@ -246,7 +246,7 @@ class ResilientSearchClient:
         }
 
     def format_results_as_context(self, search_res: dict) -> str:
-        """Formats search output into structured context for Pikachu AI prompt."""
+        """Formats search output into structured context for Peach AI prompt."""
         if not search_res.get("success") or not search_res.get("results"):
             return "No web search results available."
 

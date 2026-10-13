@@ -18,6 +18,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // Ensure fresh launch or warm launch always starts cleanly on Landing page if clear session on exit or private mode is active
+        if (browserViewModel.state.value.isClearSessionOnExitEnabled || browserViewModel.state.value.isPrivateMode) {
+            browserViewModel.resetToCleanSession()
+        }
+
         setContent {
             App()
         }
@@ -48,6 +53,9 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         try {
             PeachMediaService.stop(this)
+            if (isFinishing && (browserViewModel.state.value.isClearSessionOnExitEnabled || browserViewModel.state.value.isPrivateMode)) {
+                browserViewModel.resetToCleanSession()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }

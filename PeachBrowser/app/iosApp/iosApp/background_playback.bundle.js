@@ -6,10 +6,10 @@
 (function initPeachBackgroundPlayback() {
     'use strict';
 
-    if (window.__PIKACHU_BG_PLAYBACK_ACTIVE__) {
+    if (window.__PEACH_BG_PLAYBACK_ACTIVE__) {
         return;
     }
-    window.__PIKACHU_BG_PLAYBACK_ACTIVE__ = true;
+    window.__PEACH_BG_PLAYBACK_ACTIVE__ = true;
 
     try {
         // 1. Spoof Page Visibility API

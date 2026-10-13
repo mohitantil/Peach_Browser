@@ -1,4 +1,4 @@
-# Central Agent Memory: Pikachu Browser
+# Central Agent Memory: Peach Browser
 
 ## Project Architecture & Tech Stack
 - **Framework**: Kotlin Multiplatform (KMP) 2.4.20 + Compose Multiplatform 1.12.1
@@ -6,7 +6,7 @@
 - **Git Branch**: `kmp-browser` (kept strictly separate from the Python browser setup on `main`)
 - **State Management**: Clean Architecture + MVI (`BrowserViewModel`, `ChatViewModel`, `BrowserIntent`, `ChatIntent`)
 - **Dependency Injection**: Koin 4.0.0 (`koin-compose`)
-- **Local Persistence**: SQLDelight 2.0.2 (`PikachuDatabase` with `Bookmarks.sq`, `History.sq`, and `Settings.sq`)
+- **Local Persistence**: SQLDelight 2.0.2 (`PeachDatabase` with `Bookmarks.sq`, `History.sq`, and `Settings.sq`)
 - **Networking**: Ktor 3.6.0 Client & Server
 - **UI System**: Material3 with strictly SansSerif Typography, high-contrast Figma-quality design tokens, no cursive/serif default fonts.
 
@@ -157,3 +157,20 @@
     - Added `window.__PEACH_PAUSE_ALL_MEDIA__` bridge and `__peach_sleep_timer_paused` flag in `background_playback.bundle.js` preventing background auto-pause blocker and watchdog from overriding sleep timer pauses.
     - Wrapped `pauseMediaAction` execution in main looper `post { ... }` in `PeachWebView.android.kt`.
     - Added `stopPlatformMediaService()` expect/actual stopping foreground service notification and wake lock when sleep timer pauses audio or when exiting app.
+- **2026-10-13**:
+  - Resolved Back Navigation Reload Loops & Circular State Dependency:
+    - Removed destructive `webView.loadUrl(url)` and redundant script re-evaluations from Compose `AndroidView.update` and `UIKitView.update` blocks in `PeachWebView.android.kt` and `PeachWebView.ios.kt`. Initial page load is handled on creation and explicit navigations via `controller.loadUrlAction`.
+    - Implemented `PeachNativeWebView.goBackSmartly()` and `canGoBackSmartly()`: inspects `copyBackForwardList()`, automatically collapses redirect loops, anchor/hash jumps, and duplicate URLs (e.g. YouTube, DuckDuckGo), and cleanly navigates back multiple steps if needed.
+    - Streamlined `CommonBackHandler` hierarchy in `App.kt`: eliminated dead branch (`activeTab.initialUrl.isBlank()`) and removed erratic MRU tab-bouncing (`hasTabBackHistory -> PopTab`). Swiping back at the root of a tab's web history immediately transitions to the Landing page in 1 single gesture.
+    - Back gesture on Landing page cleanly minimizes/exits app without hijacking navigation.
+  - Resolved Session Restore Bug on Background Close:
+    - Added `BrowserIntent.ResetToCleanSession` and `resetToCleanSession()` in `BrowserViewModel`: clears all tab WebViews from pool, invokes `clearBrowserSession()`, and resets `tabs` back to a clean initial Landing state.
+    - Added clean session reset guard in `MainActivity.onCreate()` and `onDestroy()`: ensures reopening the browser from background or warm cache starts fresh on the Landing page when `clear_session_on_exit` is active.
+    - Implemented `onTaskRemoved()` in `PeachMediaService`: releases wake locks and stops foreground service when app task is swiped from Android Recents.
+  - Eliminated Legacy Branding Remnants & Optimized Project:
+    - Renamed JavaScript injection flags from `__PIKACHU_*__` to `__PEACH_*__` across Android and iOS assets (`background_playback.bundle.js`, `privacy_shield.bundle.js`, `farbling.bundle.js`).
+    - Updated iOS Xcode project configs (`Config.xcconfig`, `project.pbxproj`) from `PikachuBrowser` to `PeachBrowser`.
+    - Completely deleted obsolete root directory `PikachuBrowser/` using robocopy to bypass long-path limits.
+    - Removed duplicate `refactor_project.py` at root and streamlined `.gitignore`.
+    - Renamed and updated skill references (`peach-browser-dev`, `peach-kmp-architecture`).
+

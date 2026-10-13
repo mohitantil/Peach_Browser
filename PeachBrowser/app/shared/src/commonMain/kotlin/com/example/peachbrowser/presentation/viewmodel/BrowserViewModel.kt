@@ -76,14 +76,34 @@ class BrowserViewModel(
                 searchEngine = searchEngine
             )
 
-            // If clear session on exit is enabled or private mode is active, clear cookies/storage on startup
+            // If clear session on exit is enabled or private mode is active, enforce clean session on startup
             if (clearSession || privateMode) {
-                clearBrowserSession()
-                clearAllTabWebViews()
+                resetToCleanSession()
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun resetToCleanSession() {
+        val defaultTab = Tab(
+            id = "tab_${currentTimeMillis()}_1",
+            title = "New Tab",
+            url = "",
+            initialUrl = "",
+            createdAt = currentTimeMillis(),
+            lastAccessedAt = currentTimeMillis()
+        )
+        clearAllTabWebViews()
+        clearBrowserSession()
+        _state.value = _state.value.copy(
+            tabs = listOf(defaultTab),
+            activeTabId = defaultTab.id,
+            tabBackStack = listOf(defaultTab.id),
+            activePageTitle = "New Tab",
+            activePageContent = "",
+            isAudioPlaying = false
+        )
     }
 
     private fun persistSetting(key: String, value: String) {
@@ -187,6 +207,9 @@ class BrowserViewModel(
                     tab.copy(url = "", title = "New Tab", canGoBack = false, canGoForward = false)
                 }
                 _state.value = _state.value.copy(activePageTitle = "New Tab")
+            }
+            is BrowserIntent.ResetToCleanSession -> {
+                resetToCleanSession()
             }
             is BrowserIntent.AddTab -> {
                 val newId = "tab_${currentTimeMillis()}_${_state.value.tabs.size + 1}"

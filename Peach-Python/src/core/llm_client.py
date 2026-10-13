@@ -57,7 +57,7 @@ class ResilientLLMClient:
                     base_url=self.openrouter_base_url,
                     default_headers={
                         "HTTP-Referer": "http://localhost:8888",
-                        "X-Title": "Pikachu AI Browser"
+                        "X-Title": "Peach AI Browser"
                     }
                 )
             except Exception as e:
@@ -66,7 +66,7 @@ class ResilientLLMClient:
     def _clean_response(self, text: str | None) -> str | None:
         """
         Strips internal reasoning scratchpads, thinking tokens, and metadata
-        so that Pikachu AI only outputs clean, high-craft Markdown to the user.
+        so that Peach AI only outputs clean, high-craft Markdown to the user.
         """
         if not text:
             return None
@@ -243,7 +243,7 @@ class ResilientLLMClient:
                     headers = {
                         "Authorization": f"Bearer {self.openrouter_key}",
                         "HTTP-Referer": "http://localhost:8888",
-                        "X-Title": "Pikachu AI Browser",
+                        "X-Title": "Peach AI Browser",
                         "Content-Type": "application/json"
                     }
 
@@ -469,7 +469,7 @@ class ResilientLLMClient:
         bounded_tavily = tavily_context[:6000] if len(tavily_context) > 6000 else tavily_context
 
         system_prompt = (
-            "You are Pikachu AI, a specialized real-time intelligence assistant dedicated strictly to:\n"
+            "You are Peach AI, a specialized real-time intelligence assistant dedicated strictly to:\n"
             "1. Locality News (Civic, municipal & regional updates)\n"
             "2. Trading Summary of the Week (Markets, indices, commodities & crypto)\n"
             "3. Weather Updates (Meteorological conditions, telemetry, forecasts)\n\n"
@@ -492,7 +492,7 @@ class ResilientLLMClient:
     def answer_doc_query(self, user_query: str, context: str, chunk_callback = None) -> str:
         bounded_context = context[:8000] if len(context) > 8000 else context
         system_prompt = (
-            "You are Pikachu AI, an intelligent agentic assistant reviewing the active web document.\n"
+            "You are Peach AI, an intelligent agentic assistant reviewing the active web document.\n"
             "Provide a comprehensive, accurate, and structured answer to the user's request using the provided context as primary reference.\n"
             "Format your answer cleanly with Markdown headings, bullet points, and code examples where applicable.\n"
             "CRITICAL INSTRUCTIONS:\n"
@@ -505,7 +505,7 @@ class ResilientLLMClient:
     def answer_searxng_query(self, user_query: str, web_context: str, search_provider: str = "SearXNG", chunk_callback = None) -> str:
         bounded_web = web_context[:8000] if len(web_context) > 8000 else web_context
         system_prompt = (
-            "You are Pikachu AI, an agentic deep web research assistant.\n"
+            "You are Peach AI, an agentic deep web research assistant.\n"
             f"The user query was researched using live multi-engine web search via {search_provider}.\n"
             "Summarize and answer the user's query comprehensively using the web search excerpts provided below.\n"
             "Cite web sources with numbers [1], [2] referencing URLs in the excerpts, and format cleanly in Markdown.\n"
@@ -518,7 +518,7 @@ class ResilientLLMClient:
 
     def answer_general_query(self, user_query: str, chunk_callback = None) -> str:
         system_prompt = (
-            "You are Pikachu AI, a helpful agentic web assistant.\n"
+            "You are Peach AI, a helpful agentic web assistant.\n"
             "Answer the user's prompt helpfully, comprehensively, and accurately using rich Markdown formatting.\n"
             "CRITICAL INSTRUCTIONS:\n"
             "- Output ONLY the final response in Markdown directly to the user.\n"

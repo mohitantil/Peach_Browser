@@ -8,7 +8,7 @@ def main():
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     
     app = QApplication(sys.argv)
-    app.setApplicationName("Pikachu AI - Agentic Web Browser")
+    app.setApplicationName("Peach AI - Agentic Web Browser")
     
     window = AgenticDocBrowser()
     window.show()

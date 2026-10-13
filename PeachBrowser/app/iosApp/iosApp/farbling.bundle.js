@@ -7,10 +7,10 @@
 (function initPeachFarbler() {
     'use strict';
 
-    if (window.__PIKACHU_FARBLER_ACTIVE__) {
+    if (window.__PEACH_FARBLER_ACTIVE__) {
         return;
     }
-    window.__PIKACHU_FARBLER_ACTIVE__ = true;
+    window.__PEACH_FARBLER_ACTIVE__ = true;
 
     try {
         // ─── 1. GLOBAL PRIVACY CONTROL & DNT SIGNALS ─────────────────────────────

@@ -1,13 +1,13 @@
 # =====================================================================
-# Pikachu AI Browser — Automated Setup & Configuration Specification
+# Peach AI Browser — Automated Setup & Configuration Specification
 # =====================================================================
 version: "1.0"
 
 project:
-  name: "Pikachu Browser"
-  title: "Pikachu AI - Agentic Web & Research Browser"
+  name: "Peach Browser"
+  title: "Peach AI - Agentic Web & Research Browser"
   description: "Agentic research browser with TypeScript privacy shield, SearXNG local metasearch, and ChromaDB active document RAG."
-  repository: "https://github.com/mohitantil3399/Pikachu_Browser"
+  repository: "https://github.com/mohitantil3399/Peach_Browser"
   license: "GPL-3.0"
   entrypoint: "app.py"
 
@@ -133,6 +133,6 @@ pipeline:
     command_unix: "docker run -d -p 8888:8080 -v \"$(pwd)/settings.yml:/etc/searxng/settings.yml\" --name searxng searxng/searxng"
 
   step_6_launch_browser:
-    name: "Run Pikachu Browser"
+    name: "Run Peach Browser"
     windows: ".\\.venv\\Scripts\\python.exe app.py"
     unix: "./.venv/bin/python app.py"

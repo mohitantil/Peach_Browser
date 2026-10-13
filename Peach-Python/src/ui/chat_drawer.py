@@ -18,7 +18,7 @@ ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "icons"
 
 class FloatingChatDrawer(QFrame):
     """
-    Floating Pikachu AI assistant specialized exclusively for:
+    Floating Peach AI assistant specialized exclusively for:
     1. Locality News (Regional, civic & community updates)
     2. Trading Summary of the Week (Markets, indices, crypto, commodities)
     3. Weather Update (Meteorological conditions, OpenWeatherMap telemetry)
@@ -35,7 +35,7 @@ class FloatingChatDrawer(QFrame):
 
     def __init__(self, parent=None, vector_store=None, searxng_client=None, llm_client=None, get_current_url_cb=None):
         super().__init__(parent)
-        self.setObjectName("pikachuDrawer")
+        self.setObjectName("peachDrawer")
         self.vector_store = vector_store or VectorStoreManager()
         self.searxng_client = searxng_client or SearxngClient()
         self.llm_client = llm_client or LLMClient()
@@ -76,7 +76,7 @@ class FloatingChatDrawer(QFrame):
         # Agent Identity
         title_box = QVBoxLayout()
         title_box.setSpacing(1)
-        title_label = QLabel("PIKACHU AI")
+        title_label = QLabel("PEACH AI")
         title_label.setObjectName("drawerTitle")
 
         subtitle_label = QLabel("Research & Specialized Intelligence Agent")
@@ -383,7 +383,7 @@ class FloatingChatDrawer(QFrame):
         # Setup streaming cursor in chat history
         self.chat_history.append(
             "<div style='margin-top: 8px; margin-bottom: 2px;'>"
-            "<span style='color: #d49b35; font-weight: 700; font-size: 11px;'>Pikachu Agent</span> "
+            "<span style='color: #d49b35; font-weight: 700; font-size: 11px;'>Peach Agent</span> "
             "<span style='color: #7d8590; font-size: 10px;'>· Verified Intelligence Stream</span>"
             "</div>"
         )
@@ -501,7 +501,7 @@ class FloatingChatDrawer(QFrame):
             self.status_label.setText("Export failed: Empty chat")
             return
 
-        filename = f"Pikachu_Intelligence_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        filename = f"Peach_Intelligence_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Intelligence Transcript",
@@ -512,7 +512,7 @@ class FloatingChatDrawer(QFrame):
         if file_path:
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
-                    f.write("=== PIKACHU AI VERIFIED INTELLIGENCE TRANSCRIPT ===\n")
+                    f.write("=== PEACH AI VERIFIED INTELLIGENCE TRANSCRIPT ===\n")
                     f.write(f"Generated: {datetime.datetime.now().isoformat()}\n")
                     f.write(f"Active Domain: {self.current_mode}\n")
                     f.write("="*60 + "\n\n")

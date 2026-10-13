@@ -63,8 +63,8 @@ private fun loadBackgroundScript(context: Context): String {
         """
         (function() {
             try {
-                if (window.__PIKACHU_BG_PLAYBACK_ACTIVE__) return;
-                window.__PIKACHU_BG_PLAYBACK_ACTIVE__ = true;
+                if (window.__PEACH_BG_PLAYBACK_ACTIVE__) return;
+                window.__PEACH_BG_PLAYBACK_ACTIVE__ = true;
                 Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
                 Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
                 Object.defineProperty(document, 'webkitHidden', { get: () => false, configurable: true });
@@ -111,6 +111,61 @@ class PeachNativeWebView(context: Context) : WebView(context) {
         }
 
         onFullscreenChanged?.invoke(false)
+    }
+
+    private fun isSamePageOrRedirect(url1: String, url2: String): Boolean {
+        if (url1.isBlank() || url2.isBlank()) return false
+        if (url1 == url2) return true
+        val clean1 = url1.removeSuffix("/").removePrefix("https://").removePrefix("http://")
+        val clean2 = url2.removeSuffix("/").removePrefix("https://").removePrefix("http://")
+        if (clean1 == clean2) return true
+        val base1 = clean1.substringBefore("#").substringBefore("?")
+        val base2 = clean2.substringBefore("#").substringBefore("?")
+        if (base1 == base2) return true
+        if (base1.removePrefix("m.").removePrefix("www.") == base2.removePrefix("m.").removePrefix("www.")) return true
+        return false
+    }
+
+    fun canGoBackSmartly(): Boolean {
+        if (!canGoBack()) return false
+        val list = copyBackForwardList()
+        val currIndex = list.currentIndex
+        if (currIndex <= 0) return false
+
+        val currUrl = list.getItemAtIndex(currIndex)?.url ?: ""
+        var targetIndex = currIndex - 1
+        while (targetIndex >= 0) {
+            val targetUrl = list.getItemAtIndex(targetIndex)?.url ?: ""
+            if (!isSamePageOrRedirect(currUrl, targetUrl)) {
+                return true
+            }
+            targetIndex--
+        }
+        return false
+    }
+
+    fun goBackSmartly(): Boolean {
+        if (!canGoBack()) return false
+        val list = copyBackForwardList()
+        val currIndex = list.currentIndex
+        if (currIndex <= 0) return false
+
+        val currUrl = list.getItemAtIndex(currIndex)?.url ?: ""
+        var targetIndex = currIndex - 1
+        while (targetIndex >= 0) {
+            val targetUrl = list.getItemAtIndex(targetIndex)?.url ?: ""
+            if (!isSamePageOrRedirect(currUrl, targetUrl)) {
+                break
+            }
+            targetIndex--
+        }
+
+        if (targetIndex >= 0) {
+            val steps = targetIndex - currIndex
+            goBackOrForward(steps)
+            return true
+        }
+        return false
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
@@ -215,8 +270,9 @@ actual fun PeachWebView(
                         super.onPageStarted(view, pageUrl, favicon)
                         // Ephemerality: purge any sensor permissions granted to previous origin on navigation
                         SessionPermissionManager.clearTabPermissions(tabId)
+                        val canBack = if (view is PeachNativeWebView) view.canGoBackSmartly() else (view?.canGoBack() == true)
                         controller?.isLoading = true
-                        controller?.canGoBack = view?.canGoBack() == true
+                        controller?.canGoBack = canBack
                         controller?.canGoForward = view?.canGoForward() == true
                         if (pageUrl != null) {
                             lastLoadedUrl = pageUrl
@@ -226,7 +282,7 @@ actual fun PeachWebView(
                         browserViewModel.processIntent(
                             BrowserIntent.UpdateTabNavState(
                                 tabId = tabId,
-                                canGoBack = view?.canGoBack() == true,
+                                canGoBack = canBack,
                                 canGoForward = view?.canGoForward() == true,
                                 url = pageUrl ?: "",
                                 title = view?.title ?: ""
@@ -242,8 +298,9 @@ actual fun PeachWebView(
 
                     override fun onPageFinished(view: WebView?, pageUrl: String?) {
                         super.onPageFinished(view, pageUrl)
+                        val canBack = if (view is PeachNativeWebView) view.canGoBackSmartly() else (view?.canGoBack() == true)
                         controller?.isLoading = false
-                        controller?.canGoBack = view?.canGoBack() == true
+                        controller?.canGoBack = canBack
                         controller?.canGoForward = view?.canGoForward() == true
                         val pageTitle = view?.title ?: ""
                         if (pageUrl != null) {
@@ -255,7 +312,7 @@ actual fun PeachWebView(
                         browserViewModel.processIntent(
                             BrowserIntent.UpdateTabNavState(
                                 tabId = tabId,
-                                canGoBack = view?.canGoBack() == true,
+                                canGoBack = canBack,
                                 canGoForward = view?.canGoForward() == true,
                                 url = pageUrl ?: "",
                                 title = pageTitle
@@ -510,7 +567,12 @@ actual fun PeachWebView(
                 }
 
                 // Wire controller actions to this native WebView
-                controller?.goBackAction = { if (canGoBack()) goBack() }
+                controller?.goBackAction = {
+                    if (!goBackSmartly()) {
+                        controller?.canGoBack = false
+                        browserViewModel.processIntent(BrowserIntent.GoHome)
+                    }
+                }
                 controller?.goForwardAction = { if (canGoForward()) goForward() }
                 controller?.reloadAction = { reload() }
                 controller?.stopLoadingAction = { stopLoading() }
@@ -613,34 +675,30 @@ actual fun PeachWebView(
                     }
                 }
                 webView.isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
-                if (browserState.isFarblingEnabled && farblingScript.isNotBlank()) {
-                    webView.evaluateJavascript(farblingScript, null)
-                }
-                if (browserState.isBackgroundPlayEnabled) {
-                    webView.evaluateJavascript(backgroundScript, null)
-                }
             }
 
             // Sync controller states on update
-            controller?.canGoBack = webView.canGoBack()
+            val canBack = if (webView is PeachNativeWebView) webView.canGoBackSmartly() else webView.canGoBack()
+            controller?.canGoBack = canBack
             controller?.canGoForward = webView.canGoForward()
 
             // Re-bind controller actions on update
-            controller?.goBackAction = { if (webView.canGoBack()) webView.goBack() }
+            controller?.goBackAction = {
+                if (webView is PeachNativeWebView) {
+                    if (!webView.goBackSmartly()) {
+                        controller?.canGoBack = false
+                        browserViewModel.processIntent(BrowserIntent.GoHome)
+                    }
+                } else {
+                    if (webView.canGoBack()) webView.goBack() else browserViewModel.processIntent(BrowserIntent.GoHome)
+                }
+            }
             controller?.goForwardAction = { if (webView.canGoForward()) webView.goForward() }
             controller?.reloadAction = { webView.reload() }
             controller?.stopLoadingAction = { webView.stopLoading() }
             controller?.loadUrlAction = { newUrl ->
                 lastLoadedUrl = newUrl
                 webView.loadUrl(newUrl)
-            }
-
-            // Only load if the requested URL has changed from what was previously requested
-            // AND does not match the URL already loaded or currently loading in the WebView!
-            val currentWebUrl = webView.url
-            if (url.isNotBlank() && url != lastLoadedUrl && url != currentWebUrl) {
-                lastLoadedUrl = url
-                webView.loadUrl(url)
             }
         }
     )

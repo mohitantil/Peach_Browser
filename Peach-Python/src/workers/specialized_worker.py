@@ -61,7 +61,7 @@ class SpecializedQueryWorker(QThread):
     ]
 
     OUT_OF_SCOPE_MESSAGE = (
-        "### ⚡ Pikachu AI · Research & Intelligence Assistant\n\n"
+        "### ⚡ Peach AI · Research & Intelligence Assistant\n\n"
         "I can help you with:\n\n"
         "1. **📄 Active Webpage Context** — Ask questions, request summaries, or explain concepts from the current webpage.\n"
         "2. **📍 Locality News** — Regional, civic, municipal, and community updates (*Sonipat, Haryana*).\n"
@@ -187,7 +187,7 @@ class SpecializedQueryWorker(QThread):
                 else:
                     doc_context = "No active webpage context available."
 
-                self.status_signal.emit("Pikachu AI analyzing page context...")
+                self.status_signal.emit("Peach AI analyzing page context...")
                 final_answer = self.llm_client.answer_doc_query(
                     user_query=self.query,
                     context=doc_context,
@@ -237,7 +237,7 @@ class SpecializedQueryWorker(QThread):
             verified_sources = tavily_res.get("results", [])
 
             # Step 3: Stream Verified Synthesis
-            self.status_signal.emit("Pikachu AI streaming verified intelligence...")
+            self.status_signal.emit("Peach AI streaming verified intelligence...")
             final_answer = self.llm_client.answer_verified_specialized_query(
                 user_query=self.query,
                 domain_title=domain_title,

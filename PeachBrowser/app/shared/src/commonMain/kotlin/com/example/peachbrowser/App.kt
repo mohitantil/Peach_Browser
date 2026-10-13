@@ -132,7 +132,7 @@ fun App() {
         }
 
         // Multiplatform Back Navigation & Backward Swipe Hierarchy
-        val isBackHandled = webViewController.isCustomViewShowing || isSubScreenOpen || showChatSheet || showMenuSheet || showSleepTimerSheet || isCurrentTabOnWeb || hasTabBackHistory
+        val isBackHandled = webViewController.isCustomViewShowing || isSubScreenOpen || showChatSheet || showMenuSheet || showSleepTimerSheet || isCurrentTabOnWeb
 
         CommonBackHandler(enabled = isBackHandled) {
             when {
@@ -154,25 +154,13 @@ fun App() {
                     webViewController.goBack()
                 }
 
-                // Priority 4: If active tab is at its first web page and was opened from Landing, return to Landing page
-                isCurrentTabOnWeb && activeTab.initialUrl.isBlank() -> {
-                    webViewController.reset()
-                    browserViewModel.processIntent(BrowserIntent.GoHome)
-                }
-
-                // Priority 5: If active tab can't go back further, switch to previous tab in MRU tabBackStack
-                hasTabBackHistory -> {
-                    webViewController.reset()
-                    browserViewModel.processIntent(BrowserIntent.PopTab)
-                }
-
-                // Priority 6: If on a web page with no tab history, transition back to Landing page
+                // Priority 4: If active tab is at its root web page, return cleanly to Landing page in one gesture
                 isCurrentTabOnWeb -> {
                     webViewController.reset()
                     browserViewModel.processIntent(BrowserIntent.GoHome)
                 }
 
-                // Otherwise, system back minimizes/exits app cleanly without crashing
+                // Otherwise, system back cleanly minimizes/exits app on Landing page
             }
         }
 

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Pikachu Browser — Agentic AI Research Browser</title>
-  <meta name="description" content="Pikachu Browser — AI-powered agentic research browser with real-time web intelligence, document RAG, and local SearXNG."/>
+  <title>Peach Browser — Agentic AI Research Browser</title>
+  <meta name="description" content="Peach Browser — AI-powered agentic research browser with real-time web intelligence, document RAG, and local SearXNG."/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -81,7 +81,7 @@
       pointer-events: none; /* children opt-in */
     }
 
-    /* ── Pikachu mascot ── */
+    /* ── Peach mascot ── */
     .pika-wrap {
       position: relative;
       width: 130px; height: 130px;
@@ -417,13 +417,13 @@
 <!-- ── CENTER STAGE ── -->
 <main class="stage" role="main">
 
-  <!-- Pikachu mascot -->
+  <!-- Peach mascot -->
   <div class="pika-wrap" id="pikaWrap">
-    <img src="pikachu_hero.jpg" alt="Pikachu Nano Banana mascot" class="pika-img" id="pikaImg" draggable="false"/>
+    <img src="peach_hero.jpg" alt="Peach Nano Banana mascot" class="pika-img" id="pikaImg" draggable="false"/>
   </div>
 
   <!-- Badge -->
-  <div class="badge"><span class="dot"></span>Pikachu Browser · v1.1 · Agentic AI</div>
+  <div class="badge"><span class="dot"></span>Peach Browser · v1.1 · Agentic AI</div>
 
   <!-- Title -->
   <h1 class="title">
@@ -442,7 +442,7 @@
       id="searchInput"
       class="search-bar"
       type="text"
-      placeholder="Search the web or ask Pikachu AI..."
+      placeholder="Search the web or ask Peach AI..."
       autocomplete="off"
       spellcheck="false"
       aria-label="Search"
@@ -570,7 +570,7 @@
     const dx = (cx - hw) / hw;   // -1 … 1
     const dy = (cy - hh) / hh;
 
-    // Pikachu: subtle tilt toward cursor
+    // Peach: subtle tilt toward cursor
     pika.style.transform = `translate(${dx * 12}px, ${dy * 9}px)`;
 
     // Stars layer drifts opposite (parallax depth)

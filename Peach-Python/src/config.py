@@ -7,7 +7,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
 # --- APP CONSTANTS ---
-APP_TITLE = "Pikachu AI - Agentic Web & Research Browser"
+APP_TITLE = "Peach AI - Agentic Web & Research Browser"
 DEFAULT_DOC_URL = str(Path(__file__).resolve().parent / "ui" / "assets" / "home.html").replace("\\", "/")
 DEFAULT_DOC_URL = "file:///" + DEFAULT_DOC_URL if not DEFAULT_DOC_URL.startswith("file:") else DEFAULT_DOC_URL
 SEARXNG_ENDPOINT = os.getenv("SEARXNG_ENDPOINT", "http://localhost:8888/search")
@@ -44,4 +44,4 @@ WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "")
 DEFAULT_CITY = os.getenv("DEFAULT_CITY", "Sonipat")
 DEFAULT_REGION = os.getenv("DEFAULT_REGION", "Haryana")
 DEFAULT_COUNTRY = os.getenv("DEFAULT_COUNTRY", "India")
-INTELLIGENCE_COLLECTION_NAME = "pikachu_specialized_intelligence"
+INTELLIGENCE_COLLECTION_NAME = "peach_specialized_intelligence"

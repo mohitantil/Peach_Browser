@@ -1,9 +1,9 @@
 # src/ui/styles.py
 """
-Bespoke Design System for Pikachu AI Agentic Browser.
+Bespoke Design System for Peach AI Agentic Browser.
 Strictly complies with basictoadv.md standards:
 - Atmospheric dark slate / obsidian foundation (no generic AI purple or harsh neon).
-- Pikachu signature warm golden amber (#d49b35) accent with editorial restraint.
+- Peach signature warm golden amber (#d49b35) accent with editorial restraint.
 - Crisp 1px geometric borders without dirty drop shadows.
 - Refined typography hierarchy with balanced tracking and padding.
 """
@@ -88,8 +88,8 @@ QLineEdit#webSearchBox:focus {
 }
 
 
-/* Pikachu AI Assistant Toggle Button */
-QPushButton#pikachuToggleBtn {
+/* Peach AI Assistant Toggle Button */
+QPushButton#peachToggleBtn {
     background-color: #d49b35;
     color: #0c0d12;
     border: 1px solid #e5ad45;
@@ -100,17 +100,17 @@ QPushButton#pikachuToggleBtn {
     letter-spacing: 0.3px;
 }
 
-QPushButton#pikachuToggleBtn:hover {
+QPushButton#peachToggleBtn:hover {
     background-color: #e0a73e;
     border: 1px solid #f0bc55;
 }
 
-QPushButton#pikachuToggleBtn:pressed {
+QPushButton#peachToggleBtn:pressed {
     background-color: #bf8928;
 }
 
-/* --- FLOATING PIKACHU AI DRAWER --- */
-QFrame#pikachuDrawer {
+/* --- FLOATING PEACH AI DRAWER --- */
+QFrame#peachDrawer {
     background-color: #13161f;
     border: 1px solid #282e3c;
     border-radius: 12px;

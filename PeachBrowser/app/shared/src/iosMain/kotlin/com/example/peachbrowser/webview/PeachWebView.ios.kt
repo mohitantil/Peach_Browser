@@ -112,7 +112,14 @@ actual fun PeachWebView(
     }
 
     // Rebind controller actions to this active WKWebView
-    controller?.goBackAction = { if (wkWebView.canGoBack) wkWebView.goBack() }
+    controller?.goBackAction = {
+        if (wkWebView.canGoBack) {
+            wkWebView.goBack()
+        } else {
+            controller?.canGoBack = false
+            browserViewModel.processIntent(BrowserIntent.GoHome)
+        }
+    }
     controller?.goForwardAction = { if (wkWebView.canGoForward) wkWebView.goForward() }
     controller?.reloadAction = { wkWebView.reload() }
     controller?.stopLoadingAction = { wkWebView.stopLoading() }
@@ -144,12 +151,6 @@ actual fun PeachWebView(
                     title = view.title ?: ""
                 )
             )
-            val currentWkUrl = view.URL?.absoluteString ?: ""
-            if (url.isNotBlank() && url != lastLoadedUrl && url != currentWkUrl) {
-                lastLoadedUrl = url
-                val request = NSURLRequest(NSURL(string = url))
-                view.loadRequest(request)
-            }
         }
     )
 }

@@ -1,5 +1,5 @@
 /**
- * Pikachu AI Browser — Privacy Shield & Ad Neutralizer Engine
+ * Peach AI Browser — Privacy Shield & Ad Neutralizer Engine
  * Written in strict TypeScript for bulletproof DOM & YouTube player manipulation.
  */
 
@@ -36,20 +36,20 @@ declare global {
     interface Window {
         ytInitialPlayerResponse?: PlayerResponsePayload;
         movie_player?: YouTubePlayerElement;
-        __PIKACHU_SHIELD_ACTIVE__?: boolean;
+        __PEACH_SHIELD_ACTIVE__?: boolean;
     }
 }
 
 // ─── INITIALIZATION GUARD ───────────────────────────────────────────────────
-(function initPikachuShield(): void {
+(function initPeachShield(): void {
     'use strict';
 
-    if (window.__PIKACHU_SHIELD_ACTIVE__) {
+    if (window.__PEACH_SHIELD_ACTIVE__) {
         return;
     }
-    window.__PIKACHU_SHIELD_ACTIVE__ = true;
+    window.__PEACH_SHIELD_ACTIVE__ = true;
 
-    console.log('[PikachuShield] TypeScript Shield initialized');
+    console.log('[PeachShield] TypeScript Shield initialized');
 
     // ─── 1. UNIVERSAL COSMETIC CSS FILTERING ─────────────────────────────────
     const COSMETIC_STYLES: string = `
@@ -122,13 +122,13 @@ declare global {
 
     function injectCosmeticCSS(): boolean {
         try {
-            if (document.getElementById('pikachu-shield-css')) {
+            if (document.getElementById('peach-shield-css')) {
                 return true;
             }
             const target: HTMLElement | null = document.head || document.documentElement;
             if (target) {
                 const styleEl: HTMLStyleElement = document.createElement('style');
-                styleEl.id = 'pikachu-shield-css';
+                styleEl.id = 'peach-shield-css';
                 styleEl.textContent = COSMETIC_STYLES;
                 target.appendChild(styleEl);
                 return true;

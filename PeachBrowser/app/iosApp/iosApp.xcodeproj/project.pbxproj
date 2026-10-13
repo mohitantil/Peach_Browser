@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		03BB6D7E1230FFBB70749004 /* PikachuBrowser.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PikachuBrowser.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		03BB6D7E1230FFBB70749004 /* PeachBrowser.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PeachBrowser.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		86EFCF0E4697E4991BCB7605 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				03BB6D7E1230FFBB70749004 /* PikachuBrowser.app */,
+				03BB6D7E1230FFBB70749004 /* PeachBrowser.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = 03BB6D7E1230FFBB70749004 /* PikachuBrowser.app */;
+			productReference = 03BB6D7E1230FFBB70749004 /* PeachBrowser.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

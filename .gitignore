@@ -50,6 +50,9 @@ wheels/
 .vscode/
 *.swp
 *.swo
+*.iml
+.gradle/
+local.properties
 
 # OS files
 .DS_Store
@@ -63,12 +66,13 @@ futurePlan.md
 # KMP build caches and machine-specific configs
 **/.gradle/
 **/build/
-PikachuBrowser/local.properties
-PikachuBrowser/.kotlin/
+**/.kotlin/
+**/local.properties
 PeachBrowser/local.properties
 PeachBrowser/.kotlin/
+PeachBrowser/**/build/
 
-# Refactoring scripts (kept away from git and kmp)
+# Refactoring tools & temporary scripts
 refactor_project.py
 refactor_tools/
 **/refactor_project.py

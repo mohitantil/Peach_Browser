@@ -136,6 +136,11 @@ class PeachMediaService : Service() {
         }
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stopPlaybackService()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         releaseWakeLock()
         super.onDestroy()

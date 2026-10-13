@@ -44,10 +44,10 @@
 (function initPeachShield()       {
     'use strict';
 
-    if (window.__PIKACHU_SHIELD_ACTIVE__) {
+    if (window.__PEACH_SHIELD_ACTIVE__) {
         return;
     }
-    window.__PIKACHU_SHIELD_ACTIVE__ = true;
+    window.__PEACH_SHIELD_ACTIVE__ = true;
 
     console.log('[PeachShield] TypeScript Shield initialized');
 
