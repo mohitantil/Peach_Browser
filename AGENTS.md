@@ -174,4 +174,40 @@
     - User Prompt Lifecycle: Prompts user via native Android 15 permission dialog ("Only this time" / "While using the app" / "Don't allow"). On grant, caches resources in volatile tab memory and invokes `request.grant()`. On deny, calls `request.deny()`.
     - Strict Multi-Level Revocation: Automatically purges memory upon page navigation (`onPageStarted`), tab closure (`releaseTabWebView`), tab unmount (`onDispose`), and process termination (`MainActivity.onDestroy()`).
     - Added `<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />` and non-required camera/mic hardware features in `AndroidManifest.xml`.
+- **2026-10-14**:
+  - Implemented Brave-Grade Privacy Shield & Audio Stabilization Engine:
+    - Resolved Blank SPA / AI Sites (ChatGPT, Claude, Gemini, Qwen):
+      - Fixed false-positive class selectors in `privacy_shield.bundle.js` (`[class*="ad-container"]` -> `.ad-container`) to avoid hiding chat thread and upload containers.
+      - Added comprehensive AI portal & CDN allowlist (`chatgpt.com`, `oaistatic.com`, `claude.ai`, `gemini.google.com`, `qwenlm.ai`, etc.).
+      - Preserved `domStorageEnabled = true` and `databaseEnabled = true` in `PeachWebView.android.kt` across all modes, enforcing privacy via exit shredding rather than breaking DOM storage.
+      - Added no-op `set: () => {}` to `farbling.bundle.js` navigator descriptors to prevent strict-mode setter exceptions, and switched to non-destructive canvas farbling.
+      - Removed `'blur'` from `blockedEvents` in `background_playback.bundle.js` to preserve form validation and focus traps.
+    - Resolved Background YouTube Audio Stuttering:
+      - Added `media.readyState >= 3` buffering guard and relaxed polling to 1500ms in `background_playback.bundle.js`.
+      - Extended `MainActivity.kt` `onPause()` foreground service trigger with `MediaDetector.isKnownStreamingSite(url)`.
+    - Implemented Transient & Permanent Audio Focus Management (Android):
+      - Created `PeachAudioFocusManager` listening for `AUDIOFOCUS_LOSS_TRANSIENT`, `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`, and `AUDIOFOCUS_GAIN`.
+      - Added `AndroidTabWebViewPool.pauseAllMedia()` and `resumeActiveMedia()` alongside controller bridges.
+      - Implemented `window.__PEACH_PAUSE_ALL_MEDIA__` and `window.__PEACH_RESUME_ALL_MEDIA__` in background playback bundle.
+    - Real-Time Shield Toggling & Brave-Styled ShieldSheet:
+      - Added synchronous `PeachNativeBridge.isShieldActive()`, `isFarblingActive()`, and `isBackgroundPlayActive()` query methods.
+      - Updated bundle scripts to query runtime bridge and `window.__PEACH_CONFIG__` on each page load, enabling instant toggle without app relaunch.
+      - Built `ShieldSheet.kt` with master toggle, telemetry badge, granular switches (ads, farbling, scripts), HTTPS status, and `ShredSiteData`.
+      - Made omnibox shield icon (`🛡️`) in `App.kt` clickable to display `ShieldSheet`.
+      - Cleaned up redundant type checks and safe calls across Compose screens.
+  - Resolved YouTube 1-Second Auto-Pause & AI Site / BotGuard Blank Screen Regressions:
+    - Root Cause 1 (YouTube Auto-Pause within 1s): In `PeachWebView.android.kt`, `onMediaStateChanged(true)` invoked `audioFocusManager.requestAudioFocus(AUDIOFOCUS_GAIN)`. In Android WebView, Chromium's internal media player manages its own audio focus; an external app request for focus caused Android OS to revoke focus from Chromium (`AUDIOFOCUS_LOSS`), automatically pausing the video within a second. Fix: Removed conflicting external `requestAudioFocus` call, allowing Chromium's native audio engine to retain uninterrupted focus.
+    - Root Cause 2 (Gemini & YouTube Music Blank/Black Body): In `farbling.bundle.js`, `toDataURL` mutated Base64 PNG characters (corrupting Deflate stream and checksums) and returned fake WebGL vendor `'Google Inc. (Peach Browser)'`. Google's BotGuard (on Gemini and YouTube Music) and Cloudflare Turnstile (on ChatGPT) run canvas and WebGL conformance checks during bootstrap; corrupted PNGs and non-standard WebGL strings caused integrity checks to fail and API payloads (`/batchexecute`, `/youtubei/v1/browse`) to abort. Fix: Removed Base64 mutation from `toDataURL`, removed fake WebGL vendor string, and allowlisted sensitive AI/Google domains.
+    - Root Cause 3 (Android WebView Header Leaking): Android WebView sent `X-Requested-With: com.example.peachbrowser` by default on all HTTP requests, triggering Google's embedded WebView blocker. Fix: Enforced `WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())` to strip `X-Requested-With`.
+    - Root Cause 4 (Background Playback Pollution on Non-Streaming Sites): `background_playback.bundle.js` was injecting Page Visibility and `addEventListener` hooks into all websites. Fix: Scoped `background_playback.bundle.js` strictly to known streaming media domains (`STREAMING_DOMAINS`) and removed aggressive `HTMLMediaElement.prototype.pause` interception that conflicted with YouTube's internal track transition state machine.
+    - Synced all bundle assets across Android (`app/androidApp/src/main/assets/`) and iOS (`app/iosApp/iosApp/`).
+    - Verified build passes with 0 errors via `./gradlew :app:androidApp:assembleDebug`.
+  - Comprehensive Audit & Stabilization Alignment against `argon.txt`:
+    - Cloudflare Turnstile / Sandboxed Challenge Iframe Fix: In `farbling.bundle.js` (Android & iOS), added explicit guard skipping execution if `currentHost` is empty (e.g. `about:blank` challenge subframes on `chatgpt.com`, `qwen.ai`, and `z.ai`), preserving Turnstile bot verification and SPA hydration.
+    - Preserved Pure SPA DOM & Prototype Environment: Scoped Page Visibility and event overrides in `background_playback.bundle.js` strictly to streaming domains, ensuring zero interference with AI chat SPAs.
+    - Chromium Compositor Surface Starvation Resolved: Removed `onWindowFocusChanged(true)` override from `PeachNativeWebView` to prevent Chromium's GPU thread from spinning buffer swaps on a destroyed window surface, eliminating YouTube background audio stutter and murmuring.
+    - Media Detector Debouncing (1200ms): Added debouncing in `media_detector.bundle.js` to prevent transient chunk buffering and track transitions from prematurely dropping and re-requesting Audio Focus.
+    - Preserved IndexedDB / Polymer Backing Store: Removed premature `resetToCleanSession()` during `BrowserViewModel.loadPersistedSettings()`, ensuring session data and storage quota stores are never wiped while active WebView processes are booting.
+    - Verified live toggle reload via `appliedReloadTrigger` on `PeachNativeWebView`, persisting across navigation back from `SettingsScreen`.
+    - Android APK debug build validated: `BUILD SUCCESSFUL in 14s` with zero errors.
 

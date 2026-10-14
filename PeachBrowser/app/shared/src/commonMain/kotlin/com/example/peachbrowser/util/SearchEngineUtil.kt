@@ -21,12 +21,12 @@ enum class SearchEngine(
         iconEmoji = "🔍",
         description = "Comprehensive global web search"
     ),
-    BRAVE(
-        id = "Brave",
-        displayName = "Brave Search",
-        searchUrlTemplate = "https://search.brave.com/search?q=%s",
-        iconEmoji = "🦁",
-        description = "Independent search index with zero profiling"
+    STARTPAGE(
+        id = "Startpage",
+        displayName = "Startpage",
+        searchUrlTemplate = "https://www.startpage.com/sp/search?query=%s",
+        iconEmoji = "🛡️",
+        description = "Private search results with zero profiling"
     ),
     BING(
         id = "Bing",
@@ -46,7 +46,7 @@ enum class SearchEngine(
             val trimmed = name.trim().lowercase()
             return when {
                 trimmed.contains("google") -> GOOGLE
-                trimmed.contains("brave") -> BRAVE
+                trimmed.contains("startpage") -> STARTPAGE
                 trimmed.contains("bing") -> BING
                 else -> DUCKDUCKGO
             }

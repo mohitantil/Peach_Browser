@@ -10,132 +10,158 @@
     if (window.__PEACH_FARBLER_ACTIVE__) {
         return;
     }
-    window.__PEACH_FARBLER_ACTIVE__ = true;
+
+    let currentHost = '';
+    try {
+        currentHost = (location.hostname || '').toLowerCase();
+        if (!currentHost && window.top && window.top.location) {
+            currentHost = (window.top.location.hostname || '').toLowerCase();
+        }
+    } catch (e) {}
+
+    // Never run in about:blank / sandboxed challenge subframes where hostname is empty
+    if (!currentHost) {
+        return;
+    }
+
+    // Allowlist modern AI / SPA portals and verification providers so Turnstile/Arkose/Polymer never break
+    const spaAllowlist = [
+        'chatgpt.com', 'openai.com', 'oaistatic.com', 'oaiusercontent.com',
+        'qwen.ai', 'qwenlm.ai', 'aliyun.com', 'alicdn.com',
+        'z.ai', 'chat.z.ai',
+        'gemini.google.com', 'aistudio.google.com', 'music.youtube.com', 'youtube.com', 'google.com',
+        'claude.ai', 'anthropic.com', 'cloudflare.com', 'challenges.cloudflare.com'
+    ];
+
+    if (spaAllowlist.some(d => currentHost === d || currentHost.endsWith('.' + d))) {
+        return;
+    }
 
     try {
-        // ─── 1. GLOBAL PRIVACY CONTROL & DNT SIGNALS ─────────────────────────────
+        if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isFarblingActive === 'function') {
+            if (!window.PeachNativeBridge.isFarblingActive(currentHost)) {
+                return;
+            }
+        } else if (window.__PEACH_CONFIG__ && typeof window.__PEACH_CONFIG__.farblingActive === 'boolean') {
+            if (!window.__PEACH_CONFIG__.farblingActive) {
+                return;
+            }
+        }
+    } catch (e) {}
+
+    window.__PEACH_FARBLER_ACTIVE__ = true;
+
+    function maskNativeFunction(fn, nativeName) {
+        try {
+            Object.defineProperty(fn, 'name', { value: nativeName, configurable: true });
+            Object.defineProperty(fn, 'toString', {
+                value: function() { return 'function ' + nativeName + '() { [native code] }'; },
+                configurable: true,
+                writable: true
+            });
+        } catch (e) {}
+        return fn;
+    }
+
+    try {
+        // 1. Global Privacy Control & DNT Signals
         try {
             Object.defineProperty(navigator, 'globalPrivacyControl', {
-                get: () => true,
-                configurable: false,
+                get: maskNativeFunction(() => true, 'get globalPrivacyControl'),
+                configurable: true,
                 enumerable: true
             });
             Object.defineProperty(navigator, 'doNotTrack', {
-                get: () => '1',
-                configurable: false,
-                enumerable: true
-            });
-            Object.defineProperty(window, 'doNotTrack', {
-                get: () => '1',
-                configurable: false,
+                get: maskNativeFunction(() => '1', 'get doNotTrack'),
+                configurable: true,
                 enumerable: true
             });
         } catch (e) {}
 
-        // ─── 2. HARDWARE ENTROPY REDUCTION ────────────────────────────────────────
+        // 2. Hardware Entropy Reduction
         try {
             Object.defineProperty(navigator, 'hardwareConcurrency', {
-                get: () => 8,
+                get: maskNativeFunction(() => 8, 'get hardwareConcurrency'),
                 configurable: true,
                 enumerable: true
             });
-            Object.defineProperty(navigator, 'deviceMemory', {
-                get: () => 8,
-                configurable: true,
-                enumerable: true
-            });
-            if ('getBattery' in navigator) {
-                delete navigator.getBattery;
+            if ('deviceMemory' in navigator) {
+                Object.defineProperty(navigator, 'deviceMemory', {
+                    get: maskNativeFunction(() => 8, 'get deviceMemory'),
+                    configurable: true,
+                    enumerable: true
+                });
             }
         } catch (e) {}
 
-        // ─── 3. DETERMINISTIC ORIGIN SEED GENERATOR ──────────────────────────────
-        const originStr = window.location.host || 'peach.browser';
+        // 3. Deterministic Origin Seed Generator
         let seed = 0;
-        for (let i = 0; i < originStr.length; i++) {
-            seed = ((seed << 5) - seed) + originStr.charCodeAt(i);
+        for (let i = 0; i < currentHost.length; i++) {
+            seed = ((seed << 5) - seed) + currentHost.charCodeAt(i);
             seed |= 0;
         }
 
-        // Pseudo-random generator with origin seed
         const pseudoRandom = () => {
-            seed = (seed * 9301 + 49297) % 233280;
+            seed = (Math.abs(seed * 9301 + 49297)) % 233280;
             return seed / 233280;
         };
 
-        // ─── 4. CANVAS FINGERPRINTING FARBLER ──────────────────────────────────────
-        const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-        CanvasRenderingContext2D.prototype.getImageData = function(x, y, w, h) {
-            const imageData = origGetImageData.apply(this, arguments);
-            try {
-                if (imageData && imageData.data && imageData.data.length > 4) {
-                    // Farble only 1-2 random pixel channels by 1 bit so human cannot notice
-                    const pixelIndex = Math.floor(pseudoRandom() * (imageData.data.length / 4)) * 4;
-                    imageData.data[pixelIndex] ^= 1;
-                }
-            } catch (e) {}
-            return imageData;
-        };
+        // 4. Non-Destructive Canvas Farbler (small fingerprinting probes <= 64x64 only)
+        if (typeof CanvasRenderingContext2D !== 'undefined' && CanvasRenderingContext2D.prototype.getImageData) {
+            const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+            const farbledGetImageData = function(x, y, w, h) {
+                const imageData = origGetImageData.apply(this, arguments);
+                try {
+                    if (imageData && imageData.data && imageData.data.length > 16) {
+                        const canvasW = this.canvas ? this.canvas.width : w;
+                        const canvasH = this.canvas ? this.canvas.height : h;
+                        if (canvasW > 0 && canvasW <= 64 && canvasH > 0 && canvasH <= 64) {
+                            const pixelIndex = Math.floor(pseudoRandom() * (imageData.data.length / 4)) * 4;
+                            if (pixelIndex >= 0 && pixelIndex < imageData.data.length) {
+                                imageData.data[pixelIndex] = imageData.data[pixelIndex] ^ 1;
+                            }
+                        }
+                    }
+                } catch (e) {}
+                return imageData;
+            };
+            CanvasRenderingContext2D.prototype.getImageData = maskNativeFunction(farbledGetImageData, 'getImageData');
+        }
 
-        const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
-        HTMLCanvasElement.prototype.toDataURL = function() {
-            try {
-                const ctx = this.getContext('2d');
-                if (ctx && this.width > 0 && this.height > 0) {
-                    // Touch 1 single pixel with zero-opacity farble
-                    const origFill = ctx.fillStyle;
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.005)';
-                    ctx.fillRect(0, 0, 1, 1);
-                    ctx.fillStyle = origFill;
-                }
-            } catch (e) {}
-            return origToDataURL.apply(this, arguments);
-        };
-
-        // ─── 5. AUDIOCONTEXT FINGERPRINTING FARBLER ────────────────────────────────
-        if (typeof AudioBuffer !== 'undefined') {
+        // 5. AudioContext Farbler
+        if (typeof AudioBuffer !== 'undefined' && AudioBuffer.prototype.getChannelData) {
             const origGetChannelData = AudioBuffer.prototype.getChannelData;
-            AudioBuffer.prototype.getChannelData = function(channel) {
+            const farbledGetChannelData = function(channel) {
                 const data = origGetChannelData.apply(this, arguments);
                 try {
-                    if (data && data.length > 10) {
-                        // Inject 10^-7 microscopic Gaussian noise into 2 samples
+                    if (data && data.length > 10 && data.length <= 8192) {
                         const idx = Math.floor(pseudoRandom() * data.length);
-                        data[idx] += (pseudoRandom() - 0.5) * 0.0000001;
+                        if (idx >= 0 && idx < data.length) {
+                            data[idx] += (pseudoRandom() - 0.5) * 0.0000001;
+                        }
                     }
                 } catch (e) {}
                 return data;
             };
+            AudioBuffer.prototype.getChannelData = maskNativeFunction(farbledGetChannelData, 'getChannelData');
         }
 
-        if (typeof AnalyserNode !== 'undefined') {
-            const origGetFloatFrequencyData = AnalyserNode.prototype.getFloatFrequencyData;
-            AnalyserNode.prototype.getFloatFrequencyData = function(array) {
-                origGetFloatFrequencyData.apply(this, arguments);
+        // 6. WebGL Farbler with valid mobile GPU strings
+        const hookWebGL = (proto) => {
+            if (!proto || !proto.getParameter) return;
+            const origGetParameter = proto.getParameter;
+            const farbledGetParameter = function(pname) {
                 try {
-                    if (array && array.length > 0) {
-                        const idx = Math.floor(pseudoRandom() * array.length);
-                        array[idx] += (pseudoRandom() - 0.5) * 0.00001;
+                    if (pname === 0x9245) {
+                        return 'Qualcomm';
+                    }
+                    if (pname === 0x9246) {
+                        return 'Adreno (TM) 740';
                     }
                 } catch (e) {}
-            };
-        }
-
-        // ─── 6. WEBGL FINGERPRINTING FARBLER ──────────────────────────────────────
-        const hookWebGL = (proto) => {
-            if (!proto) return;
-            const origGetParameter = proto.getParameter;
-            proto.getParameter = function(pname) {
-                // UNMASKED_VENDOR_WEBGL
-                if (pname === 0x9245) {
-                    return 'Google Inc. (Peach Browser)';
-                }
-                // UNMASKED_RENDERER_WEBGL
-                if (pname === 0x9246) {
-                    return 'ANGLE (Generic GPU, Direct3D11/Vulkan/Metal, Generic Driver)';
-                }
                 return origGetParameter.apply(this, arguments);
             };
+            proto.getParameter = maskNativeFunction(farbledGetParameter, 'getParameter');
         };
 
         if (typeof WebGLRenderingContext !== 'undefined') {
@@ -144,9 +170,5 @@
         if (typeof WebGL2RenderingContext !== 'undefined') {
             hookWebGL(WebGL2RenderingContext.prototype);
         }
-
-        console.log('[Peach] Farbling and Global Privacy Control shield active.');
-    } catch (e) {
-        console.error('[Peach] Farbling initialization exception:', e);
-    }
+    } catch (e) {}
 })();

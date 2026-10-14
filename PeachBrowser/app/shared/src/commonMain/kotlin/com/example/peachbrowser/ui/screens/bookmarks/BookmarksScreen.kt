@@ -38,7 +38,7 @@ fun BookmarksScreen(
 
     fun refresh() {
         bookmarks = try {
-            database?.bookmarksQueries?.getAllBookmarks()?.executeAsList() ?: emptyList()
+            database.bookmarksQueries.getAllBookmarks().executeAsList()
         } catch (e: Exception) {
             emptyList()
         }
@@ -153,7 +153,7 @@ fun BookmarksScreen(
                                 }
                                 IconButton(
                                     onClick = {
-                                        database?.bookmarksQueries?.deleteBookmark(item.id)
+                                        database.bookmarksQueries.deleteBookmark(item.id)
                                         refresh()
                                     }
                                 ) {
@@ -194,7 +194,7 @@ fun BookmarksScreen(
                         Button(
                             onClick = {
                                 if (newUrl.isNotBlank()) {
-                                    database?.bookmarksQueries?.insertBookmark(
+                                    database.bookmarksQueries.insertBookmark(
                                         url = newUrl,
                                         title = newTitle.ifBlank { newUrl },
                                         createdAt = currentTimeMillis()

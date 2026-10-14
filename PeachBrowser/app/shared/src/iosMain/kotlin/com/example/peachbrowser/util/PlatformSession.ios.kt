@@ -27,3 +27,20 @@ actual fun exitBrowserApp() {
     }
 }
 
+actual fun shredSiteData(host: String) {
+    try {
+        val dataStore = WKWebsiteDataStore.defaultDataStore()
+        val dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
+        dataStore.fetchDataRecordsOfTypes(dataTypes) { records ->
+            records?.forEach { record ->
+                val r = record as? platform.WebKit.WKWebsiteDataRecord
+                if (r != null && r.displayName.contains(host)) {
+                    dataStore.removeDataOfTypes(r.dataTypes, listOf(r)) {}
+                }
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+

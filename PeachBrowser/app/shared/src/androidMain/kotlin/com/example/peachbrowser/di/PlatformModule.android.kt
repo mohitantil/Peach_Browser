@@ -5,4 +5,5 @@ import org.koin.dsl.module
 
 actual fun platformModule() = module {
     single { DriverFactory(get()) }
+    single { com.example.peachbrowser.util.PeachAudioFocusManager(get()) }
 }

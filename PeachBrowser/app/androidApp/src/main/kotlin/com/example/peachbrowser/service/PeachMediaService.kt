@@ -8,16 +8,17 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.example.peachbrowser.MainActivity
-import com.example.peachbrowser.R
 
 class PeachMediaService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -59,11 +60,11 @@ class PeachMediaService : Service() {
             }
         }
 
-        acquireWakeLock()
+        acquireLocks()
     }
 
     private fun stopPlaybackService() {
-        releaseWakeLock()
+        releaseLocks()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
@@ -73,30 +74,71 @@ class PeachMediaService : Service() {
         stopSelf()
     }
 
-    private fun acquireWakeLock() {
-        if (wakeLock == null) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "PeachBrowser::MediaStreamingWakeLock"
-            ).apply {
-                setReferenceCounted(false)
+    private fun acquireLocks() {
+        try {
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "PeachBrowser::MediaStreamingWakeLock"
+                ).apply {
+                    setReferenceCounted(false)
+                }
             }
+            wakeLock?.let {
+                if (!it.isHeld) {
+                    it.acquire(6 * 60 * 60 * 1000L)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        wakeLock?.let {
-            if (!it.isHeld) {
-                it.acquire(6 * 60 * 60 * 1000L) // 6 hours timeout safety
+
+        try {
+            if (wifiLock == null) {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                val lockType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                } else {
+                    @Suppress("DEPRECATION")
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                }
+                wifiLock = wifiManager?.createWifiLock(lockType, "PeachBrowser::MediaStreamingWifiLock")?.apply {
+                    setReferenceCounted(false)
+                }
             }
+            wifiLock?.let {
+                if (!it.isHeld) {
+                    it.acquire()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
-    private fun releaseWakeLock() {
-        wakeLock?.let {
-            if (it.isHeld) {
-                it.release()
+    private fun releaseLocks() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                }
             }
+            wakeLock = null
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        wakeLock = null
+
+        try {
+            wifiLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                }
+            }
+            wifiLock = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun buildNotification(): Notification {
@@ -112,7 +154,7 @@ class PeachMediaService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Peach Browser")
-            .setContentText("Background streaming is active")
+            .setContentText("Background audio streaming is active")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -142,7 +184,7 @@ class PeachMediaService : Service() {
     }
 
     override fun onDestroy() {
-        releaseWakeLock()
+        releaseLocks()
         super.onDestroy()
     }
 

@@ -140,7 +140,7 @@ fun SleepTimerSheet(
                             listOf(5, 15, 30).forEach { addMins ->
                                 OutlinedButton(
                                     onClick = {
-                                        val remainingMins = (state.remainingSeconds / 60).toInt()
+                                        val remainingMins = state.remainingSeconds / 60
                                         onStartTimer(remainingMins + addMins, state.action)
                                     },
                                     modifier = Modifier.weight(1f),

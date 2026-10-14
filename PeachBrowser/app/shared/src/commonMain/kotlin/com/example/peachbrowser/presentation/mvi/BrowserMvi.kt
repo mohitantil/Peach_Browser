@@ -31,6 +31,16 @@ data class SleepTimerState(
         }
 }
 
+@Serializable
+data class SiteShieldConfig(
+    val shieldsUp: Boolean = true,
+    val blockTrackersAndAds: Boolean = true,
+    val blockScripts: Boolean = false,
+    val blockFingerprinting: Boolean = true,
+    val blockCookies: Boolean = false,
+    val blockedCount: Int = 0
+)
+
 data class DownloadItem(
     val id: Long,
     val fileName: String,
@@ -77,6 +87,11 @@ sealed interface BrowserIntent {
     data class DeleteHistoryItem(val id: Long) : BrowserIntent
     object ClearHistory : BrowserIntent
 
+    // Shield & Real-Time Reload Intents
+    data class ReloadActiveTab(val forced: Boolean = false) : BrowserIntent
+    data class ToggleSiteShield(val host: String, val config: SiteShieldConfig) : BrowserIntent
+    data class ShredSiteData(val host: String) : BrowserIntent
+
     // Sleep Timer Intents
     data class SetAudioPlaying(val isPlaying: Boolean) : BrowserIntent
     data class StartSleepTimer(val durationMinutes: Int, val action: SleepTimerAction = SleepTimerAction.PAUSE_PLAYBACK) : BrowserIntent
@@ -106,6 +121,8 @@ data class BrowserState(
     val isAudioPlaying: Boolean = false,
     val sleepTimer: SleepTimerState = SleepTimerState(),
     val downloads: List<DownloadItem> = emptyList(),
+    val siteShieldOverrides: Map<String, SiteShieldConfig> = emptyMap(),
+    val shouldReloadTrigger: Int = 0,
     val quickLinks: List<QuickLink> = listOf(
         QuickLink("DuckDuckGo", "duckduckgo.com", "🔍"),
         QuickLink("YouTube", "youtube.com", "▶️"),

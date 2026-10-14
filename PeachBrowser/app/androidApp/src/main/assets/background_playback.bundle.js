@@ -1,18 +1,108 @@
 /**
  * Peach AI Browser — True Background Playback Engine
- * Bypasses Page Visibility API, Fullscreen API, document.hidden, window.blur,
- * and suppresses automatic background pausing on YouTube, Vimeo, and media streaming sites.
+ * Scoped strictly to streaming media domains so non-media SPAs are never affected,
+ * while exposing global Pause/Resume/Duck bridges for Audio Focus and Sleep Timer.
  */
 (function initPeachBackgroundPlayback() {
     'use strict';
 
+    const nativeMediaPause = HTMLMediaElement.prototype.pause;
+
+    window.__PEACH_EXTERNAL_PAUSED__ = false;
+
+    window.__PEACH_PAUSE_ALL_MEDIA__ = function() {
+        try {
+            window.__PEACH_EXTERNAL_PAUSED__ = true;
+            const mediaElements = document.querySelectorAll('video, audio');
+            mediaElements.forEach(media => {
+                if (!media.paused) {
+                    media.__peach_paused_by_focus = true;
+                }
+                media.__peach_sleep_timer_paused = true;
+                media.__peach_user_paused = true;
+                media.__peach_was_playing = false;
+                try {
+                    nativeMediaPause.apply(media);
+                } catch (e) {}
+            });
+            if (window.PeachNativeBridge && typeof window.PeachNativeBridge.onMediaStateChanged === 'function') {
+                window.PeachNativeBridge.onMediaStateChanged(false);
+            }
+        } catch (err) {}
+    };
+
+    window.__PEACH_RESUME_ALL_MEDIA__ = function() {
+        try {
+            window.__PEACH_EXTERNAL_PAUSED__ = false;
+            const mediaElements = document.querySelectorAll('video, audio');
+            mediaElements.forEach(media => {
+                const shouldResume = media.__peach_paused_by_focus === true;
+                media.__peach_paused_by_focus = false;
+                media.__peach_sleep_timer_paused = false;
+                media.__peach_user_paused = false;
+                media.__peach_was_playing = true;
+                if (shouldResume) {
+                    try {
+                        const playPromise = media.play();
+                        if (playPromise !== undefined) {
+                            playPromise.catch(() => {});
+                        }
+                    } catch (e) {}
+                }
+            });
+        } catch (err) {}
+    };
+
+    window.__PEACH_DUCK_MEDIA__ = function(duck) {
+        try {
+            const mediaElements = document.querySelectorAll('video, audio');
+            mediaElements.forEach(media => {
+                if (duck) {
+                    if (typeof media.__peach_orig_volume !== 'number') {
+                        media.__peach_orig_volume = media.volume;
+                    }
+                    media.volume = Math.max(0.15, (media.__peach_orig_volume || 1.0) * 0.25);
+                } else if (typeof media.__peach_orig_volume === 'number') {
+                    media.volume = media.__peach_orig_volume;
+                    delete media.__peach_orig_volume;
+                }
+            });
+        } catch (e) {}
+    };
+
     if (window.__PEACH_BG_PLAYBACK_ACTIVE__) {
         return;
     }
+
+    // Only apply Page Visibility / Focus spoofing on streaming media websites!
+    // Never touch EventTarget.prototype.addEventListener or document.hasFocus on AI/SPA sites.
+    const currentHost = (location.hostname || '').toLowerCase();
+    const streamingDomains = [
+        'youtube.com', 'youtu.be', 'vimeo.com', 'dailymotion.com',
+        'twitch.tv', 'soundcloud.com', 'spotify.com', 'music.apple.com',
+        'gaana.com', 'jiosaavn.com', 'wynk.in', 'tidal.com',
+        'deezer.com', 'pandora.com', 'audiomack.com', 'bandcamp.com'
+    ];
+    const isStreamingDomain = streamingDomains.some(d => currentHost === d || currentHost.endsWith('.' + d));
+    if (!isStreamingDomain) {
+        return;
+    }
+
+    try {
+        if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isBackgroundPlayActive === 'function') {
+            if (!window.PeachNativeBridge.isBackgroundPlayActive()) {
+                return;
+            }
+        } else if (window.__PEACH_CONFIG__ && typeof window.__PEACH_CONFIG__.bgPlayActive === 'boolean') {
+            if (!window.__PEACH_CONFIG__.bgPlayActive) {
+                return;
+            }
+        }
+    } catch (e) {}
+
     window.__PEACH_BG_PLAYBACK_ACTIVE__ = true;
 
     try {
-        // 1. Spoof Page Visibility API
         const defineVisProperty = (target, prop, val) => {
             try {
                 Object.defineProperty(target, prop, {
@@ -28,53 +118,29 @@
         defineVisProperty(document, 'visibilityState', 'visible');
         defineVisProperty(document, 'webkitHidden', false);
         defineVisProperty(document, 'webkitVisibilityState', 'visible');
-        defineVisProperty(document, 'mozHidden', false);
-        defineVisProperty(document, 'mozVisibilityState', 'visible');
 
-        // 2. Spoof document.hasFocus()
-        try {
-            document.hasFocus = () => true;
-            Document.prototype.hasFocus = () => true;
-        } catch (e) {}
-
-        // 3. Prevent property-based handlers (onvisibilitychange, onpagehide, onblur)
         try {
             Object.defineProperty(document, 'onvisibilitychange', {
                 get: () => null,
                 set: () => {},
                 configurable: true
             });
-            Object.defineProperty(window, 'onpagehide', {
-                get: () => null,
-                set: () => {},
-                configurable: true
-            });
-            Object.defineProperty(window, 'onblur', {
-                get: () => null,
-                set: () => {},
-                configurable: true
-            });
         } catch (e) {}
 
-        // 4. Intercept addEventListener to drop visibility and blur listeners
         const blockedEvents = new Set([
             'visibilitychange',
             'webkitvisibilitychange',
-            'mozvisibilitychange',
-            'pagehide',
-            'blur'
+            'mozvisibilitychange'
         ]);
 
         const originalAddEventListener = EventTarget.prototype.addEventListener;
         EventTarget.prototype.addEventListener = function(type, listener, options) {
             if (blockedEvents.has(type)) {
-                // Drop site background-detection event listeners
                 return;
             }
             return originalAddEventListener.apply(this, arguments);
         };
 
-        // 5. In case listeners were registered before this script, stop propagation in capture phase
         blockedEvents.forEach(evtName => {
             window.addEventListener(evtName, (e) => {
                 e.stopImmediatePropagation();
@@ -84,11 +150,11 @@
             }, true);
         });
 
-        // 6. User Interaction Tracker for Intentional Pause vs Auto-Pause
         let isUserInteracting = false;
         let interactionTimer = null;
         const setInteracting = () => {
             isUserInteracting = true;
+            window.__PEACH_EXTERNAL_PAUSED__ = false;
             if (interactionTimer) clearTimeout(interactionTimer);
             interactionTimer = setTimeout(() => {
                 isUserInteracting = false;
@@ -99,61 +165,29 @@
             window.addEventListener(evt, setInteracting, { capture: true, passive: true });
         });
 
-        // 7. Intercept HTMLMediaElement.prototype.pause
-        const originalPause = HTMLMediaElement.prototype.pause;
         HTMLMediaElement.prototype.pause = function() {
-            if (this.__peach_sleep_timer_paused) {
-                // Sleep timer requested pause
-                return originalPause.apply(this, arguments);
+            if (window.__PEACH_EXTERNAL_PAUSED__ || this.__peach_sleep_timer_paused || this.__peach_paused_by_focus) {
+                return nativeMediaPause.apply(this, arguments);
             }
             if (isUserInteracting) {
-                // Legitimate user pause via UI button
                 this.__peach_user_paused = true;
-                return originalPause.apply(this, arguments);
+                return nativeMediaPause.apply(this, arguments);
             }
-            // Background auto-pause attempted by page scripts
-            this.__peach_user_paused = false;
-        };
-
-        // 8. Sleep Timer App-Level Pause Bridge
-        window.__PEACH_PAUSE_ALL_MEDIA__ = function() {
+            let bgStillEnabled = true;
             try {
-                const mediaElements = document.querySelectorAll('video, audio');
-                mediaElements.forEach(media => {
-                    media.__peach_sleep_timer_paused = true;
-                    media.__peach_user_paused = true;
-                    media.__peach_was_playing = false;
-                    try {
-                        originalPause.apply(media);
-                    } catch (e) {}
-                });
-            } catch (err) {
-                console.error('[Peach] Error in __PEACH_PAUSE_ALL_MEDIA__:', err);
-            }
-        };
-
-        // 9. Auto-Resume Watchdog: if a media element was playing and got paused without user intent, resume it
-        setInterval(() => {
-            try {
-                const videos = document.querySelectorAll('video, audio');
-                videos.forEach(media => {
-                    if (media.__peach_sleep_timer_paused) {
-                        return; // Sleep timer explicitly paused this media — DO NOT resume
-                    }
-                    if (media.__peach_was_playing && media.paused && !media.__peach_user_paused && !isUserInteracting) {
-                        const playPromise = media.play();
-                        if (playPromise !== undefined) {
-                            playPromise.catch(() => {});
-                        }
-                    } else if (!media.paused) {
-                        media.__peach_was_playing = true;
-                        media.__peach_user_paused = false;
-                    }
-                });
+                if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isBackgroundPlayActive === 'function') {
+                    bgStillEnabled = window.PeachNativeBridge.isBackgroundPlayActive();
+                }
             } catch (e) {}
-        }, 800);
 
-        // 9. Prevent YouTube / streaming site idle timeouts ("Are you still watching?")
+            if (bgStillEnabled && this.tagName === 'VIDEO' && (currentHost.includes('youtube.com') || currentHost.includes('vimeo.com') || currentHost.includes('youtu.be'))) {
+                this.__peach_user_paused = false;
+                return;
+            }
+            return nativeMediaPause.apply(this, arguments);
+        };
+
+        // Keep YouTube _lact active so background playback doesn't pause after 15 mins with "Are you still watching?"
         setInterval(() => {
             try {
                 if (typeof window._lact !== 'undefined') {
@@ -162,7 +196,5 @@
             } catch (e) {}
         }, 15000);
 
-    } catch (e) {
-        console.error('[Peach] Background playback initialization error:', e);
-    }
+    } catch (e) {}
 })();

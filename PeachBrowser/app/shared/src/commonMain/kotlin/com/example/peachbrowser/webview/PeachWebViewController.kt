@@ -11,6 +11,7 @@ class PeachWebViewController {
     var loadUrlAction: ((String) -> Unit)? = null
     var hideCustomViewAction: (() -> Unit)? = null
     var pauseMediaAction: (() -> Unit)? = null
+    var resumeMediaAction: (() -> Unit)? = null
 
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
@@ -23,6 +24,10 @@ class PeachWebViewController {
 
     fun pauseMedia() {
         pauseMediaAction?.invoke()
+    }
+
+    fun resumeMedia() {
+        resumeMediaAction?.invoke()
     }
 
     fun goBack() {

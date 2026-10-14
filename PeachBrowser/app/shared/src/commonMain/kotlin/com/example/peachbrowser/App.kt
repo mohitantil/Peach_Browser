@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -28,6 +29,7 @@ import com.example.peachbrowser.ui.ChatDrawer
 import com.example.peachbrowser.ui.CommonBackHandler
 import com.example.peachbrowser.ui.LandingPage
 import com.example.peachbrowser.ui.MenuOverlay
+import com.example.peachbrowser.ui.ShieldSheet
 import com.example.peachbrowser.ui.SleepTimerSheet
 import com.example.peachbrowser.ui.screens.ai.AiSettingsScreen
 import com.example.peachbrowser.ui.screens.bookmarks.BookmarksScreen
@@ -109,9 +111,11 @@ fun App() {
         val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val menuSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val sleepTimerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val shieldSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         var showChatSheet by remember { mutableStateOf(false) }
         var showMenuSheet by remember { mutableStateOf(false) }
         var showSleepTimerSheet by remember { mutableStateOf(false) }
+        var showShieldSheet by remember { mutableStateOf(false) }
 
         // Wire media pause action from browser controller
         LaunchedEffect(webViewController) {
@@ -132,7 +136,7 @@ fun App() {
         }
 
         // Multiplatform Back Navigation & Backward Swipe Hierarchy
-        val isBackHandled = webViewController.isCustomViewShowing || isSubScreenOpen || showChatSheet || showMenuSheet || showSleepTimerSheet || isCurrentTabOnWeb
+        val isBackHandled = webViewController.isCustomViewShowing || isSubScreenOpen || showChatSheet || showMenuSheet || showSleepTimerSheet || showShieldSheet || isCurrentTabOnWeb
 
         CommonBackHandler(enabled = isBackHandled) {
             when {
@@ -145,6 +149,7 @@ fun App() {
                 showChatSheet -> showChatSheet = false
                 showMenuSheet -> showMenuSheet = false
                 showSleepTimerSheet -> showSleepTimerSheet = false
+                showShieldSheet -> showShieldSheet = false
 
                 // Priority 2: Pop sub-screens (Settings, TabsList, Bookmarks, History, Downloads, AiSettings)
                 isSubScreenOpen -> navController.popBackStack()
@@ -187,11 +192,21 @@ fun App() {
                             textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.SansSerif, color = Color(0xFF1E1E2E)),
                             placeholder = { Text("Search or type URL", fontFamily = FontFamily.SansSerif, fontSize = 13.sp) },
                             leadingIcon = {
-                                Text(
-                                    text = if (browserState.isPrivateMode) "🔒" else "🛡️",
-                                    fontSize = 13.sp,
-                                    modifier = Modifier.padding(start = 12.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .padding(start = 6.dp)
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .clickable {
+                                            showShieldSheet = true
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (browserState.isPrivateMode) "🔒" else "🛡️",
+                                        fontSize = 14.sp
+                                    )
+                                }
                             },
                             trailingIcon = {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
@@ -573,6 +588,31 @@ fun App() {
                         browserViewModel.processIntent(BrowserIntent.CancelSleepTimer)
                     },
                     onDismiss = { showSleepTimerSheet = false }
+                )
+            }
+        }
+
+        if (showShieldSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showShieldSheet = false },
+                sheetState = shieldSheetState,
+                containerColor = Color.Transparent,
+                dragHandle = null
+            ) {
+                ShieldSheet(
+                    browserState = browserState,
+                    activeUrl = webViewController.currentUrl.ifBlank { browserState.currentUrl },
+                    onDismiss = { showShieldSheet = false },
+                    onToggleShields = { host, config ->
+                        browserViewModel.processIntent(BrowserIntent.ToggleSiteShield(host, config))
+                    },
+                    onShredSiteData = { host ->
+                        browserViewModel.processIntent(BrowserIntent.ShredSiteData(host))
+                    },
+                    onOpenSettings = {
+                        showShieldSheet = false
+                        navController.navigate(SettingsRoute)
+                    }
                 )
             }
         }

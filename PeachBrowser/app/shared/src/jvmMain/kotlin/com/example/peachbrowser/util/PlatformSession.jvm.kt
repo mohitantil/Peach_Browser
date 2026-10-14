@@ -11,3 +11,6 @@ actual fun exitBrowserApp() {
     kotlin.system.exitProcess(0)
 }
 
+actual fun shredSiteData(host: String) {
+}
+

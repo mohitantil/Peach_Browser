@@ -38,3 +38,24 @@ actual fun exitBrowserApp() {
         kotlin.system.exitProcess(0)
     }
 }
+
+actual fun shredSiteData(host: String) {
+    try {
+        val cleanHost = host.trim().lowercase()
+        val webStorage = WebStorage.getInstance()
+        webStorage.deleteOrigin("https://$cleanHost")
+        webStorage.deleteOrigin("http://$cleanHost")
+        val cookieManager = CookieManager.getInstance()
+        val cookies = cookieManager.getCookie(cleanHost)
+        if (!cookies.isNullOrBlank()) {
+            val parts = cookies.split(";")
+            for (part in parts) {
+                val cookieName = part.substringBefore("=").trim()
+                cookieManager.setCookie(cleanHost, "$cookieName=; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+            }
+        }
+        cookieManager.flush()
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}

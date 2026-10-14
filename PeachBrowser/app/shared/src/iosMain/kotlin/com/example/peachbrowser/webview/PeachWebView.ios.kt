@@ -30,7 +30,9 @@ actual fun PeachWebView(
     modifier: Modifier
 ) {
     val browserViewModel = koinInject<BrowserViewModel>()
+    val browserState by browserViewModel.state.collectAsState()
     var lastLoadedUrl by remember(tabId) { mutableStateOf<String?>(null) }
+    var lastReloadTrigger by remember(tabId) { mutableStateOf(browserState.shouldReloadTrigger) }
 
     val wkWebView = remember(tabId) {
         IosTabWebViewPool.getOrCreate(tabId) {
@@ -126,6 +128,9 @@ actual fun PeachWebView(
     controller?.pauseMediaAction = {
         wkWebView.evaluateJavaScript("if (window.__PEACH_PAUSE_ALL_MEDIA__) window.__PEACH_PAUSE_ALL_MEDIA__(); else document.querySelectorAll('video, audio').forEach(function(e){e.pause();});", null)
     }
+    controller?.resumeMediaAction = {
+        wkWebView.evaluateJavaScript("if (window.__PEACH_RESUME_ALL_MEDIA__) window.__PEACH_RESUME_ALL_MEDIA__(); else document.querySelectorAll('video, audio').forEach(function(e){e.play();});", null)
+    }
     controller?.loadUrlAction = { newUrl -> 
         lastLoadedUrl = newUrl
         wkWebView.loadRequest(NSURLRequest(NSURL(string = newUrl)))
@@ -142,6 +147,20 @@ actual fun PeachWebView(
         update = { view ->
             controller?.canGoBack = view.canGoBack
             controller?.canGoForward = view.canGoForward
+
+            val currentHost = view.URL?.host ?: ""
+            val siteConfig = browserState.siteShieldOverrides.entries.find { currentHost == it.key || currentHost.endsWith(".${it.key}") }?.value
+            val isShieldActive = if (siteConfig != null) (siteConfig.shieldsUp && siteConfig.blockTrackersAndAds) else browserState.isAdBlockEnabled
+            val isFarblingActive = if (siteConfig != null) (siteConfig.shieldsUp && siteConfig.blockFingerprinting) else browserState.isFarblingEnabled
+            val isBgActive = browserState.isBackgroundPlayEnabled
+
+            view.evaluateJavaScript("window.__PEACH_CONFIG__ = { shieldActive: $isShieldActive, farblingActive: $isFarblingActive, bgPlayActive: $isBgActive };", null)
+
+            if (lastReloadTrigger != browserState.shouldReloadTrigger) {
+                lastReloadTrigger = browserState.shouldReloadTrigger
+                view.reload()
+            }
+
             browserViewModel.processIntent(
                 BrowserIntent.UpdateTabNavState(
                     tabId = tabId,

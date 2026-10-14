@@ -34,7 +34,7 @@ fun HistoryScreen(
 
     fun refresh() {
         historyItems = try {
-            database?.historyQueries?.getAllHistory()?.executeAsList() ?: emptyList()
+            database.historyQueries.getAllHistory().executeAsList()
         } catch (e: Exception) {
             emptyList()
         }
@@ -69,7 +69,7 @@ fun HistoryScreen(
                     if (historyItems.isNotEmpty()) {
                         TextButton(
                             onClick = {
-                                database?.historyQueries?.clearAllHistory()
+                                database.historyQueries.clearAllHistory()
                                 refresh()
                             }
                         ) {
@@ -176,7 +176,7 @@ fun HistoryScreen(
                                 }
                                 IconButton(
                                     onClick = {
-                                        database?.historyQueries?.deleteHistoryById(item.id)
+                                        database.historyQueries.deleteHistoryById(item.id)
                                         refresh()
                                     }
                                 ) {

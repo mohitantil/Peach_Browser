@@ -16,6 +16,7 @@ import com.example.peachbrowser.util.SearchEngine
 import com.example.peachbrowser.util.UrlSanitizer
 import com.example.peachbrowser.util.clearBrowserSession
 import com.example.peachbrowser.util.exitBrowserApp
+import com.example.peachbrowser.util.shredSiteData
 import com.example.peachbrowser.util.stopPlatformMediaService
 import com.example.peachbrowser.webview.clearAllTabWebViews
 import com.example.peachbrowser.webview.releaseTabWebView
@@ -76,10 +77,6 @@ class BrowserViewModel(
                 searchEngine = searchEngine
             )
 
-            // If clear session on exit is enabled or private mode is active, enforce clean session on startup
-            if (clearSession || privateMode) {
-                resetToCleanSession()
-            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -124,8 +121,11 @@ class BrowserViewModel(
                     if (!url.startsWith("http://") && !url.startsWith("https://")) {
                         url = "https://$url"
                     }
-                    if (_state.value.isTrackingProtectionEnabled || _state.value.isDeAmpEnabled) {
-                        url = UrlSanitizer.sanitize(url)
+                    if (_state.value.isDeAmpEnabled) {
+                        url = UrlSanitizer.deAmp(url)
+                    }
+                    if (_state.value.isTrackingProtectionEnabled) {
+                        url = UrlSanitizer.stripTrackingParams(url)
                     }
                     updateCurrentTab { tab ->
                         tab.copy(
@@ -140,7 +140,7 @@ class BrowserViewModel(
                 val engine = SearchEngine.fromName(_state.value.searchEngine)
                 var searchUrl = engine.buildSearchUrl(intent.query)
                 if (_state.value.isTrackingProtectionEnabled) {
-                    searchUrl = UrlSanitizer.sanitize(searchUrl)
+                    searchUrl = UrlSanitizer.stripTrackingParams(searchUrl)
                 }
                 updateCurrentTab { tab ->
                     tab.copy(
@@ -158,10 +158,8 @@ class BrowserViewModel(
             is BrowserIntent.PageLoaded -> {
                 val url = intent.url
                 val title = intent.title.ifBlank { url }
-                val isStreamingSite = MediaDetector.isKnownStreamingSite(url)
                 _state.value = _state.value.copy(
-                    activePageTitle = title,
-                    isAudioPlaying = if (isStreamingSite) true else _state.value.isAudioPlaying
+                    activePageTitle = title
                 )
                 updateCurrentTab { tab ->
                     tab.copy(url = url, title = title, lastAccessedAt = currentTimeMillis())
@@ -300,35 +298,107 @@ class BrowserViewModel(
                 }
             }
             is BrowserIntent.ToggleBackgroundPlay -> {
-                _state.value = _state.value.copy(isBackgroundPlayEnabled = intent.enabled)
-                persistSetting("background_play_enabled", intent.enabled.toString())
+                if (_state.value.isBackgroundPlayEnabled != intent.enabled) {
+                    _state.value = _state.value.copy(
+                        isBackgroundPlayEnabled = intent.enabled,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                    persistSetting("background_play_enabled", intent.enabled.toString())
+                    if (!intent.enabled) {
+                        stopPlatformMediaService()
+                    }
+                }
             }
             is BrowserIntent.ToggleAdBlock -> {
-                _state.value = _state.value.copy(isAdBlockEnabled = intent.enabled)
-                persistSetting("ad_block_enabled", intent.enabled.toString())
+                if (_state.value.isAdBlockEnabled != intent.enabled) {
+                    _state.value = _state.value.copy(
+                        isAdBlockEnabled = intent.enabled,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                    persistSetting("ad_block_enabled", intent.enabled.toString())
+                }
             }
             is BrowserIntent.TogglePrivateMode -> {
-                _state.value = _state.value.copy(isPrivateMode = intent.enabled)
-                persistSetting("private_mode", intent.enabled.toString())
-                if (intent.enabled) {
-                    clearBrowserSession()
+                if (_state.value.isPrivateMode != intent.enabled) {
+                    _state.value = _state.value.copy(
+                        isPrivateMode = intent.enabled,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                    persistSetting("private_mode", intent.enabled.toString())
                 }
             }
             is BrowserIntent.ToggleClearSessionOnExit -> {
-                _state.value = _state.value.copy(isClearSessionOnExitEnabled = intent.enabled)
-                persistSetting("clear_session_on_exit", intent.enabled.toString())
+                if (_state.value.isClearSessionOnExitEnabled != intent.enabled) {
+                    _state.value = _state.value.copy(isClearSessionOnExitEnabled = intent.enabled)
+                    persistSetting("clear_session_on_exit", intent.enabled.toString())
+                }
             }
             is BrowserIntent.ToggleTrackingProtection -> {
-                _state.value = _state.value.copy(isTrackingProtectionEnabled = intent.enabled)
-                persistSetting("tracking_protection_enabled", intent.enabled.toString())
+                if (_state.value.isTrackingProtectionEnabled != intent.enabled) {
+                    val currentUrl = _state.value.currentUrl
+                    val sanitizedUrl = if (intent.enabled && currentUrl.isNotBlank()) {
+                        UrlSanitizer.stripTrackingParams(currentUrl)
+                    } else {
+                        currentUrl
+                    }
+                    updateCurrentTab { tab ->
+                        if (sanitizedUrl.isNotBlank()) tab.copy(url = sanitizedUrl) else tab
+                    }
+                    _state.value = _state.value.copy(
+                        isTrackingProtectionEnabled = intent.enabled,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                    persistSetting("tracking_protection_enabled", intent.enabled.toString())
+                }
             }
             is BrowserIntent.ToggleFarbling -> {
-                _state.value = _state.value.copy(isFarblingEnabled = intent.enabled)
-                persistSetting("farbling_enabled", intent.enabled.toString())
+                if (_state.value.isFarblingEnabled != intent.enabled) {
+                    _state.value = _state.value.copy(
+                        isFarblingEnabled = intent.enabled,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                    persistSetting("farbling_enabled", intent.enabled.toString())
+                }
             }
             is BrowserIntent.ToggleDeAmp -> {
-                _state.value = _state.value.copy(isDeAmpEnabled = intent.enabled)
-                persistSetting("deamp_enabled", intent.enabled.toString())
+                if (_state.value.isDeAmpEnabled != intent.enabled) {
+                    val currentUrl = _state.value.currentUrl
+                    val deAmpedUrl = if (intent.enabled && currentUrl.isNotBlank()) {
+                        UrlSanitizer.deAmp(currentUrl)
+                    } else {
+                        currentUrl
+                    }
+                    updateCurrentTab { tab ->
+                        if (deAmpedUrl.isNotBlank()) tab.copy(url = deAmpedUrl) else tab
+                    }
+                    _state.value = _state.value.copy(
+                        isDeAmpEnabled = intent.enabled,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                    persistSetting("deamp_enabled", intent.enabled.toString())
+                }
+            }
+            is BrowserIntent.ReloadActiveTab -> {
+                _state.value = _state.value.copy(
+                    shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                )
+            }
+            is BrowserIntent.ToggleSiteShield -> {
+                val existing = _state.value.siteShieldOverrides[intent.host]
+                if (existing != intent.config) {
+                    val updatedOverrides = _state.value.siteShieldOverrides.toMutableMap()
+                    updatedOverrides[intent.host] = intent.config
+                    _state.value = _state.value.copy(
+                        siteShieldOverrides = updatedOverrides,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                }
+            }
+            is BrowserIntent.ShredSiteData -> {
+                shredSiteData(intent.host)
+                _state.value = _state.value.copy(
+                    shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                )
             }
             is BrowserIntent.SetSearchEngine -> {
                 _state.value = _state.value.copy(searchEngine = intent.engine)
@@ -393,7 +463,9 @@ class BrowserViewModel(
                 }
             }
             is BrowserIntent.SetAudioPlaying -> {
-                _state.value = _state.value.copy(isAudioPlaying = intent.isPlaying)
+                if (_state.value.isAudioPlaying != intent.isPlaying) {
+                    _state.value = _state.value.copy(isAudioPlaying = intent.isPlaying)
+                }
             }
             is BrowserIntent.StartSleepTimer -> {
                 startSleepTimer(intent.durationMinutes, intent.action)
