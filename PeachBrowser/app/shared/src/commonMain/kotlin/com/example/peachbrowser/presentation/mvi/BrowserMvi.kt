@@ -3,6 +3,19 @@ package com.example.peachbrowser.presentation.mvi
 import com.example.peachbrowser.domain.model.Tab
 import kotlinx.serialization.Serializable
 
+val DEFAULT_SITE_EXCEPTIONS = setOf(
+    "gemini.google.com",
+    "aistudio.google.com",
+    "chatgpt.com",
+    "claude.ai",
+    "deepseek.com",
+    "z.ai",
+    "qwen.ai",
+    "openrouter.ai"
+)
+
+const val THIRTY_DAYS_MILLIS = 30L * 24L * 60L * 60L * 1000L
+
 @Serializable
 data class QuickLink(
     val title: String,
@@ -41,13 +54,19 @@ data class SiteShieldConfig(
     val blockedCount: Int = 0
 )
 
+@Serializable
 data class DownloadItem(
     val id: Long,
     val fileName: String,
     val url: String,
+    val mimeType: String = "",
     val progress: Int = 0,
     val isCompleted: Boolean = false,
+    val isFailed: Boolean = false,
     val localUri: String? = null,
+    val filePath: String? = null,
+    val bytesDownloaded: Long = 0L,
+    val totalBytes: Long = -1L,
     val timestamp: Long = 0L
 )
 
@@ -87,9 +106,12 @@ sealed interface BrowserIntent {
     data class DeleteHistoryItem(val id: Long) : BrowserIntent
     object ClearHistory : BrowserIntent
 
-    // Shield & Real-Time Reload Intents
+    // Shield, Site Exceptions & Real-Time Reload Intents
     data class ReloadActiveTab(val forced: Boolean = false) : BrowserIntent
     data class ToggleSiteShield(val host: String, val config: SiteShieldConfig) : BrowserIntent
+    data class AddSiteException(val host: String) : BrowserIntent
+    data class RemoveSiteException(val host: String) : BrowserIntent
+    object ResetDefaultSiteExceptions : BrowserIntent
     data class ShredSiteData(val host: String) : BrowserIntent
 
     // Sleep Timer Intents
@@ -101,7 +123,15 @@ sealed interface BrowserIntent {
 
     // Download Intents
     data class AddDownload(val item: DownloadItem) : BrowserIntent
-    data class UpdateDownloadProgress(val id: Long, val progress: Int, val isCompleted: Boolean, val localUri: String? = null) : BrowserIntent
+    data class UpdateDownloadProgress(
+        val id: Long,
+        val progress: Int,
+        val isCompleted: Boolean,
+        val localUri: String? = null
+    ) : BrowserIntent
+    data class RemoveDownloadItem(val id: Long, val deleteFromStorage: Boolean = false) : BrowserIntent
+    object ClearSessionDownloads : BrowserIntent
+    object SyncDownloadsWithStorage : BrowserIntent
 }
 
 data class BrowserState(
@@ -120,8 +150,10 @@ data class BrowserState(
     val activePageTitle: String = "",
     val isAudioPlaying: Boolean = false,
     val sleepTimer: SleepTimerState = SleepTimerState(),
+    val sessionDownloads: List<DownloadItem> = emptyList(),
     val downloads: List<DownloadItem> = emptyList(),
     val siteShieldOverrides: Map<String, SiteShieldConfig> = emptyMap(),
+    val siteExceptions: Set<String> = DEFAULT_SITE_EXCEPTIONS,
     val shouldReloadTrigger: Int = 0,
     val quickLinks: List<QuickLink> = listOf(
         QuickLink("DuckDuckGo", "duckduckgo.com", "🔍"),

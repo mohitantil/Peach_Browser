@@ -1,13 +1,10 @@
 package com.example.peachbrowser.util
 
-actual fun postSensorNotification(origin: String, sensors: Set<SensorType>) {
-    // Desktop stub
-}
+import com.example.peachbrowser.presentation.mvi.DownloadItem
 
-actual fun cancelSensorNotification() {
-    // Desktop stub
-}
-
-actual fun openDownloadsFolder() {
-    // Desktop stub
-}
+actual fun postSensorNotification(origin: String, sensors: Set<SensorType>) {}
+actual fun cancelSensorNotification() {}
+actual fun openDownloadsFolder() {}
+actual fun openDownloadedFile(item: DownloadItem) {}
+actual fun deleteDownloadedFileFromStorage(item: DownloadItem) {}
+actual fun syncDownloadsWithStorage(items: List<DownloadItem>): List<DownloadItem> = items

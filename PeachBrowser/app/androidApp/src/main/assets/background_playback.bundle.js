@@ -74,11 +74,9 @@
         return;
     }
 
-    // Only apply Page Visibility / Focus spoofing on streaming media websites!
-    // Never touch EventTarget.prototype.addEventListener or document.hasFocus on AI/SPA sites.
     const currentHost = (location.hostname || '').toLowerCase();
     const streamingDomains = [
-        'youtube.com', 'youtu.be', 'vimeo.com', 'dailymotion.com',
+        'youtube.com', 'music.youtube.com', 'youtu.be', 'vimeo.com', 'dailymotion.com',
         'twitch.tv', 'soundcloud.com', 'spotify.com', 'music.apple.com',
         'gaana.com', 'jiosaavn.com', 'wynk.in', 'tidal.com',
         'deezer.com', 'pandora.com', 'audiomack.com', 'bandcamp.com'
@@ -125,17 +123,23 @@
                 set: () => {},
                 configurable: true
             });
+            Object.defineProperty(window, 'onblur', {
+                get: () => null,
+                set: () => {},
+                configurable: true
+            });
         } catch (e) {}
 
         const blockedEvents = new Set([
             'visibilitychange',
             'webkitvisibilitychange',
-            'mozvisibilitychange'
+            'mozvisibilitychange',
+            'blur'
         ]);
 
         const originalAddEventListener = EventTarget.prototype.addEventListener;
         EventTarget.prototype.addEventListener = function(type, listener, options) {
-            if (blockedEvents.has(type)) {
+            if (blockedEvents.has(type) && (this === document || this === window)) {
                 return;
             }
             return originalAddEventListener.apply(this, arguments);
@@ -180,21 +184,22 @@
                 }
             } catch (e) {}
 
-            if (bgStillEnabled && this.tagName === 'VIDEO' && (currentHost.includes('youtube.com') || currentHost.includes('vimeo.com') || currentHost.includes('youtu.be'))) {
+            if (bgStillEnabled && (this.tagName === 'VIDEO' || this.tagName === 'AUDIO') &&
+                (currentHost.includes('youtube.com') || currentHost.includes('vimeo.com') || currentHost.includes('youtu.be'))
+            ) {
                 this.__peach_user_paused = false;
                 return;
             }
             return nativeMediaPause.apply(this, arguments);
         };
 
-        // Keep YouTube _lact active so background playback doesn't pause after 15 mins with "Are you still watching?"
+        // Maintain window._lact every 30s to prevent YouTube's inactivity watchdog from pausing audio
+        window._lact = Date.now();
         setInterval(() => {
             try {
-                if (typeof window._lact !== 'undefined') {
-                    window._lact = Date.now();
-                }
+                window._lact = Date.now();
             } catch (e) {}
-        }, 15000);
+        }, 30000);
 
     } catch (e) {}
 })();

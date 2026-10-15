@@ -14,6 +14,13 @@ enum class SearchEngine(
         iconEmoji = "🦆",
         description = "Privacy-focused search without tracking"
     ),
+    BRAVE(
+        id = "Brave",
+        displayName = "Brave Search",
+        searchUrlTemplate = "https://search.brave.com/search?q=%s",
+        iconEmoji = "🦁",
+        description = "Independent privacy search engine"
+    ),
     GOOGLE(
         id = "Google",
         displayName = "Google",
@@ -45,6 +52,7 @@ enum class SearchEngine(
         fun fromName(name: String): SearchEngine {
             val trimmed = name.trim().lowercase()
             return when {
+                trimmed.contains("brave") -> BRAVE
                 trimmed.contains("google") -> GOOGLE
                 trimmed.contains("startpage") -> STARTPAGE
                 trimmed.contains("bing") -> BING

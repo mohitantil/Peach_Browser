@@ -29,6 +29,7 @@ fun ShieldSheet(
     activeUrl: String,
     onDismiss: () -> Unit,
     onToggleShields: (host: String, config: SiteShieldConfig) -> Unit,
+    onToggleSiteException: (host: String, addException: Boolean) -> Unit = { _, _ -> },
     onShredSiteData: (host: String) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -37,14 +38,18 @@ fun ShieldSheet(
         extractHostFromUrl(activeUrl)
     }
 
-    val currentConfig = remember(browserState.siteShieldOverrides, host) {
+    val isSiteException = remember(browserState.siteExceptions, host) {
+        host.isNotBlank() && browserState.siteExceptions.any { host == it || host.endsWith(".$it") }
+    }
+
+    val currentConfig = remember(browserState.siteShieldOverrides, host, isSiteException) {
         browserState.siteShieldOverrides[host] ?: SiteShieldConfig(
-            shieldsUp = browserState.isAdBlockEnabled || browserState.isTrackingProtectionEnabled,
-            blockTrackersAndAds = browserState.isAdBlockEnabled,
+            shieldsUp = !isSiteException && (browserState.isAdBlockEnabled || browserState.isTrackingProtectionEnabled),
+            blockTrackersAndAds = !isSiteException && browserState.isAdBlockEnabled,
             blockScripts = false,
-            blockFingerprinting = browserState.isFarblingEnabled,
+            blockFingerprinting = !isSiteException && browserState.isFarblingEnabled,
             blockCookies = false,
-            blockedCount = if (browserState.isAdBlockEnabled) 4 else 0
+            blockedCount = if (!isSiteException && browserState.isAdBlockEnabled) 4 else 0
         )
     }
 
@@ -82,7 +87,6 @@ fun ShieldSheet(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Drag handle visual indicator
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -97,7 +101,6 @@ fun ShieldSheet(
                 )
             }
 
-            // Top Header: Site Host & Dismiss
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -116,7 +119,7 @@ fun ShieldSheet(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = if (shieldsUp) "🛡️" else "⚪",
+                                text = if (isSiteException) "⚡" else if (shieldsUp) "🛡️" else "⚪",
                                 fontSize = 20.sp
                             )
                         }
@@ -131,18 +134,24 @@ fun ShieldSheet(
                             color = Color(0xFF1E1E2E)
                         )
                         Text(
-                            text = if (shieldsUp) "Shields up for this site" else "Shields down for this site",
+                            text = when {
+                                isSiteException -> "Compatibility Mode (Site Exception)"
+                                shieldsUp -> "Shields up for this site"
+                                else -> "Shields down for this site"
+                            },
                             fontFamily = FontFamily.SansSerif,
                             fontSize = 13.sp,
-                            color = if (shieldsUp) Color(0xFFE65100) else Color(0xFF757575)
+                            color = if (shieldsUp && !isSiteException) Color(0xFFE65100) else Color(0xFF5E35B1)
                         )
                     }
                 }
 
-                // Master Shields Toggle
                 Switch(
-                    checked = shieldsUp,
+                    checked = shieldsUp && !isSiteException,
                     onCheckedChange = { checked ->
+                        if (isSiteException && checked) {
+                            onToggleSiteException(host, false)
+                        }
                         shieldsUp = checked
                         emitUpdate(newShieldsUp = checked)
                     },
@@ -155,14 +164,63 @@ fun ShieldSheet(
                 )
             }
 
-            // Status Card: Blocked Trackers Badge
+            // Quick Site Exception Toggle Button
+            if (host.isNotBlank()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable {
+                            onToggleSiteException(host, !isSiteException)
+                        },
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isSiteException) Color(0xFFEDE7F6) else Color.White,
+                    border = BorderStroke(1.dp, Color(0xFFD1C4E9))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isSiteException) "In Site Exceptions (Compatibility Mode)" else "Add to Site Exceptions",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF5E35B1)
+                            )
+                            Text(
+                                text = if (isSiteException)
+                                    "Tap to remove exception and restore full shields"
+                                else
+                                    "Recommended if login, Turnstile, or chat input fails",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 11.sp,
+                                color = Color(0xFF757575)
+                            )
+                        }
+                        Text(
+                            text = if (isSiteException) "REMOVE" else "ADD",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF7E57C2)
+                        )
+                    }
+                }
+            }
+
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
                 shape = RoundedCornerShape(18.dp),
-                color = if (shieldsUp) Color(0xFFFFF3E0) else Color(0xFFF5F5F5),
-                border = BorderStroke(1.dp, if (shieldsUp) Color(0xFFFFCC80) else Color(0xFFE0E0E0))
+                color = if (shieldsUp && !isSiteException) Color(0xFFFFF3E0) else Color(0xFFF5F5F5),
+                border = BorderStroke(1.dp, if (shieldsUp && !isSiteException) Color(0xFFFFCC80) else Color(0xFFE0E0E0))
             ) {
                 Row(
                     modifier = Modifier
@@ -173,18 +231,18 @@ fun ShieldSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (shieldsUp) "Trackers, ads & farbling active" else "Protections paused",
+                            text = if (shieldsUp && !isSiteException) "Trackers, ads & farbling active" else "Compatibility Mode active",
                             fontFamily = FontFamily.SansSerif,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (shieldsUp) Color(0xFFE65100) else Color(0xFF616161)
+                            color = if (shieldsUp && !isSiteException) Color(0xFFE65100) else Color(0xFF616161)
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = if (shieldsUp)
+                            text = if (shieldsUp && !isSiteException)
                                 "Neutralizing cross-site scripts, trackers, and fingerprinting"
                             else
-                                "Site is running in raw browser mode with shields down",
+                                "DOM storage & challenges enabled; session wiped on exit",
                             fontFamily = FontFamily.SansSerif,
                             fontSize = 12.sp,
                             color = Color(0xFF757575)
@@ -192,11 +250,11 @@ fun ShieldSheet(
                     }
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (shieldsUp) Color(0xFFFF6F00) else Color(0xFFBDBDBD),
+                        color = if (shieldsUp && !isSiteException) Color(0xFFFF6F00) else Color(0xFF7E57C2),
                         modifier = Modifier.padding(start = 12.dp)
                     ) {
                         Text(
-                            text = if (shieldsUp) "ACTIVE" else "OFF",
+                            text = if (shieldsUp && !isSiteException) "ACTIVE" else "COMPAT",
                             fontFamily = FontFamily.SansSerif,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -209,7 +267,6 @@ fun ShieldSheet(
 
             Spacer(Modifier.height(12.dp))
 
-            // Expandable Advanced Controls Toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -239,46 +296,42 @@ fun ShieldSheet(
                         .fillMaxWidth()
                         .padding(top = 8.dp)
                 ) {
-                    // Block Trackers & Ads Toggle
                     ShieldRowItem(
                         icon = "🚫",
                         title = "Block trackers & ads",
                         subtitle = "Filters ads and analytics beacons",
-                        checked = blockTrackers && shieldsUp,
-                        enabled = shieldsUp,
+                        checked = blockTrackers && shieldsUp && !isSiteException,
+                        enabled = shieldsUp && !isSiteException,
                         onCheckedChange = { checked ->
                             blockTrackers = checked
                             emitUpdate(newBlockTrackers = checked)
                         }
                     )
 
-                    // Block Fingerprinting (Farbling) Toggle
                     ShieldRowItem(
                         icon = "🎭",
                         title = "Block fingerprinting (Farbling)",
                         subtitle = "Adds micro-noise to Canvas, Audio & WebGL",
-                        checked = blockFingerprinting && shieldsUp,
-                        enabled = shieldsUp,
+                        checked = blockFingerprinting && shieldsUp && !isSiteException,
+                        enabled = shieldsUp && !isSiteException,
                         onCheckedChange = { checked ->
                             blockFingerprinting = checked
                             emitUpdate(newBlockFingerprinting = checked)
                         }
                     )
 
-                    // Block Scripts (JavaScript) Toggle
                     ShieldRowItem(
                         icon = "⚡",
                         title = "Block scripts (JavaScript)",
                         subtitle = "Disables script execution on this origin",
-                        checked = blockScripts && shieldsUp,
-                        enabled = shieldsUp,
+                        checked = blockScripts && shieldsUp && !isSiteException,
+                        enabled = shieldsUp && !isSiteException,
                         onCheckedChange = { checked ->
                             blockScripts = checked
                             emitUpdate(newBlockScripts = checked)
                         }
                     )
 
-                    // HTTPS Upgrade status indicator
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -325,7 +378,6 @@ fun ShieldSheet(
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Shred Site Data Button
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -362,9 +414,8 @@ fun ShieldSheet(
 
             Spacer(Modifier.height(14.dp))
 
-            // Footer note
             Text(
-                text = "If this site appears broken, try turning Shields down for this site. Note: this may reduce your privacy protections.",
+                text = "If this site appears broken, add it to Site Exceptions for Compatibility Mode. All session cookies are still wiped when you exit Peach Browser.",
                 fontFamily = FontFamily.SansSerif,
                 fontSize = 11.sp,
                 color = Color(0xFF9E9E9E),
@@ -377,7 +428,6 @@ fun ShieldSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            // Navigation to Global Shield Settings & Done
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -476,8 +526,8 @@ private fun ShieldRowItem(
 private fun extractHostFromUrl(url: String): String {
     if (url.isBlank()) return ""
     return try {
-        val clean = url.trim().removePrefix("https://").removePrefix("http://")
-        clean.substringBefore("/").substringBefore("?").substringBefore(":")
+        val clean = url.trim().lowercase().removePrefix("https://").removePrefix("http://")
+        clean.substringBefore("/").substringBefore("?").substringBefore(":").removePrefix("www.")
     } catch (e: Exception) {
         ""
     }

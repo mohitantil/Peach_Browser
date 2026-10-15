@@ -12,13 +12,14 @@ import platform.Foundation.NSBundle
 import platform.Foundation.NSString
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
-import platform.Foundation.stringWithContentsOfFile
 import platform.Foundation.NSUTF8StringEncoding
-import platform.WebKit.WKWebView
-import platform.WebKit.WKWebViewConfiguration
+import platform.Foundation.stringWithContentsOfFile
+import platform.WebKit.WKAudiovisualMediaTypeNone
 import platform.WebKit.WKUserContentController
 import platform.WebKit.WKUserScript
 import platform.WebKit.WKUserScriptInjectionTime
+import platform.WebKit.WKWebView
+import platform.WebKit.WKWebViewConfiguration
 import platform.WebKit.WKWebsiteDataStore
 
 @OptIn(ExperimentalForeignApi::class)
@@ -39,8 +40,8 @@ actual fun PeachWebView(
             val config = WKWebViewConfiguration()
             val userContentController = WKUserContentController()
 
-            // Strict Privacy: Ephemeral Session
-            config.websiteDataStore = WKWebsiteDataStore.nonPersistentDataStore()
+            // Session-persistent store for active OAuth/Turnstile compatibility, shredded on app exit
+            config.websiteDataStore = WKWebsiteDataStore.defaultDataStore()
 
             // Inject Privacy Shield
             val bundlePath = NSBundle.mainBundle.pathForResource("privacy_shield.bundle", "js")
@@ -99,10 +100,10 @@ actual fun PeachWebView(
             }
             config.userContentController = userContentController
             config.allowsInlineMediaPlayback = true
+            config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone
 
             WKWebView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0), configuration = config).apply {
                 allowsBackForwardNavigationGestures = true
-                customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
             }
         }
     }
@@ -113,7 +114,6 @@ actual fun PeachWebView(
         }
     }
 
-    // Rebind controller actions to this active WKWebView
     controller?.goBackAction = {
         if (wkWebView.canGoBack) {
             wkWebView.goBack()
@@ -131,7 +131,7 @@ actual fun PeachWebView(
     controller?.resumeMediaAction = {
         wkWebView.evaluateJavaScript("if (window.__PEACH_RESUME_ALL_MEDIA__) window.__PEACH_RESUME_ALL_MEDIA__(); else document.querySelectorAll('video, audio').forEach(function(e){e.play();});", null)
     }
-    controller?.loadUrlAction = { newUrl -> 
+    controller?.loadUrlAction = { newUrl ->
         lastLoadedUrl = newUrl
         wkWebView.loadRequest(NSURLRequest(NSURL(string = newUrl)))
     }
@@ -148,13 +148,17 @@ actual fun PeachWebView(
             controller?.canGoBack = view.canGoBack
             controller?.canGoForward = view.canGoForward
 
-            val currentHost = view.URL?.host ?: ""
+            val currentHost = (view.URL?.host ?: "").lowercase()
+            val isException = browserState.siteExceptions.any { currentHost == it || currentHost.endsWith(".$it") }
             val siteConfig = browserState.siteShieldOverrides.entries.find { currentHost == it.key || currentHost.endsWith(".${it.key}") }?.value
-            val isShieldActive = if (siteConfig != null) (siteConfig.shieldsUp && siteConfig.blockTrackersAndAds) else browserState.isAdBlockEnabled
-            val isFarblingActive = if (siteConfig != null) (siteConfig.shieldsUp && siteConfig.blockFingerprinting) else browserState.isFarblingEnabled
+            val isShieldActive = if (isException) false else if (siteConfig != null) (siteConfig.shieldsUp && siteConfig.blockTrackersAndAds) else browserState.isAdBlockEnabled
+            val isFarblingActive = if (isException) false else if (siteConfig != null) (siteConfig.shieldsUp && siteConfig.blockFingerprinting) else browserState.isFarblingEnabled
             val isBgActive = browserState.isBackgroundPlayEnabled
 
-            view.evaluateJavaScript("window.__PEACH_CONFIG__ = { shieldActive: $isShieldActive, farblingActive: $isFarblingActive, bgPlayActive: $isBgActive };", null)
+            view.evaluateJavaScript(
+                "window.__PEACH_CONFIG__ = { shieldActive: $isShieldActive, farblingActive: $isFarblingActive, bgPlayActive: $isBgActive, isSiteException: $isException };",
+                null
+            )
 
             if (lastReloadTrigger != browserState.shouldReloadTrigger) {
                 lastReloadTrigger = browserState.shouldReloadTrigger

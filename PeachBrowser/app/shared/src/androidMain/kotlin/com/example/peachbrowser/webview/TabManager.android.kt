@@ -15,9 +15,18 @@ object AndroidTabWebViewPool {
         val existing = pool[tabId]
         if (existing != null) {
             (existing.parent as? ViewGroup)?.removeView(existing)
+            existing.layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
             return existing
         }
-        val created = factory(context)
+        val created = factory(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
         pool[tabId] = created
         return created
     }

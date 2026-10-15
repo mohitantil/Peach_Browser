@@ -7,25 +7,33 @@ import com.example.peachbrowser.db.PeachDatabase
 import com.example.peachbrowser.domain.model.Tab
 import com.example.peachbrowser.presentation.mvi.BrowserIntent
 import com.example.peachbrowser.presentation.mvi.BrowserState
-import com.example.peachbrowser.presentation.mvi.QuickLink
+import com.example.peachbrowser.presentation.mvi.DEFAULT_SITE_EXCEPTIONS
 import com.example.peachbrowser.presentation.mvi.DownloadItem
+import com.example.peachbrowser.presentation.mvi.QuickLink
+import com.example.peachbrowser.presentation.mvi.SiteShieldConfig
 import com.example.peachbrowser.presentation.mvi.SleepTimerAction
 import com.example.peachbrowser.presentation.mvi.SleepTimerState
-import com.example.peachbrowser.util.MediaDetector
+import com.example.peachbrowser.presentation.mvi.THIRTY_DAYS_MILLIS
 import com.example.peachbrowser.util.SearchEngine
 import com.example.peachbrowser.util.UrlSanitizer
 import com.example.peachbrowser.util.clearBrowserSession
+import com.example.peachbrowser.util.deleteDownloadedFileFromStorage
 import com.example.peachbrowser.util.exitBrowserApp
 import com.example.peachbrowser.util.shredSiteData
 import com.example.peachbrowser.util.stopPlatformMediaService
+import com.example.peachbrowser.util.syncDownloadsWithStorage
 import com.example.peachbrowser.webview.clearAllTabWebViews
 import com.example.peachbrowser.webview.releaseTabWebView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class BrowserViewModel(
     private val database: PeachDatabase? = null
@@ -35,10 +43,28 @@ class BrowserViewModel(
     val state: StateFlow<BrowserState> = _state.asStateFlow()
 
     private var sleepTimerJob: Job? = null
+    private var downloadsSyncJob: Job? = null
     var onPausePlaybackAction: (() -> Unit)? = null
 
     init {
         loadPersistedSettings()
+        startRealTimeDownloadsSync()
+    }
+
+    private fun normalizeDomain(raw: String): String {
+        return raw.trim()
+            .lowercase()
+            .removePrefix("https://")
+            .removePrefix("http://")
+            .substringBefore("/")
+            .substringBefore("?")
+            .substringBefore(":")
+            .removePrefix("www.")
+    }
+
+    private fun pruneOlderThan30Days(items: List<DownloadItem>, nowMillis: Long = currentTimeMillis()): List<DownloadItem> {
+        val cutoff = nowMillis - THIRTY_DAYS_MILLIS
+        return items.filter { it.timestamp >= cutoff }
     }
 
     private fun loadPersistedSettings() {
@@ -52,6 +78,9 @@ class BrowserViewModel(
             var farbling = _state.value.isFarblingEnabled
             var deAmp = _state.value.isDeAmpEnabled
             var searchEngine = _state.value.searchEngine
+            var siteExceptions = _state.value.siteExceptions
+            var siteShieldOverrides = _state.value.siteShieldOverrides
+            var allTimeDownloads = _state.value.downloads
 
             for (setting in settingsList) {
                 when (setting.key) {
@@ -63,8 +92,28 @@ class BrowserViewModel(
                     "farbling_enabled" -> farbling = setting.setting_value.toBooleanStrictOrNull() ?: farbling
                     "deamp_enabled" -> deAmp = setting.setting_value.toBooleanStrictOrNull() ?: deAmp
                     "search_engine" -> searchEngine = setting.setting_value
+                    "site_exceptions" -> {
+                        siteExceptions = setting.setting_value
+                            .split(",")
+                            .map { normalizeDomain(it) }
+                            .filter { it.isNotBlank() }
+                            .toSet()
+                    }
+                    "site_shield_overrides" -> {
+                        try {
+                            siteShieldOverrides = Json.decodeFromString(setting.setting_value)
+                        } catch (_: Exception) {}
+                    }
+                    "all_time_downloads" -> {
+                        try {
+                            val decoded = Json.decodeFromString<List<DownloadItem>>(setting.setting_value)
+                            allTimeDownloads = pruneOlderThan30Days(decoded)
+                        } catch (_: Exception) {}
+                    }
                 }
             }
+
+            val syncedAllTime = syncDownloadsWithStorage(allTimeDownloads)
 
             _state.value = _state.value.copy(
                 isBackgroundPlayEnabled = bgPlay,
@@ -74,9 +123,59 @@ class BrowserViewModel(
                 isTrackingProtectionEnabled = trackingProtection,
                 isFarblingEnabled = farbling,
                 isDeAmpEnabled = deAmp,
-                searchEngine = searchEngine
+                searchEngine = searchEngine,
+                siteExceptions = siteExceptions,
+                siteShieldOverrides = siteShieldOverrides,
+                downloads = syncedAllTime
             )
 
+            if (syncedAllTime != allTimeDownloads) {
+                persistAllTimeDownloads(syncedAllTime)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun startRealTimeDownloadsSync() {
+        downloadsSyncJob?.cancel()
+        downloadsSyncJob = viewModelScope.launch {
+            while (true) {
+                delay(1000L)
+                performDownloadsStorageSync()
+            }
+        }
+    }
+
+    private suspend fun performDownloadsStorageSync() {
+        val currentSession = _state.value.sessionDownloads
+        val currentAllTime = _state.value.downloads
+        if (currentSession.isEmpty() && currentAllTime.isEmpty()) return
+
+        val now = currentTimeMillis()
+        val (syncedSession, syncedAllTime) = withContext(Dispatchers.Default) {
+            val prunedSession = pruneOlderThan30Days(currentSession, now)
+            val prunedAll = pruneOlderThan30Days(currentAllTime, now)
+            Pair(
+                syncDownloadsWithStorage(prunedSession),
+                syncDownloadsWithStorage(prunedAll)
+            )
+        }
+
+        if (syncedSession != currentSession || syncedAllTime != currentAllTime) {
+            _state.value = _state.value.copy(
+                sessionDownloads = syncedSession,
+                downloads = syncedAllTime
+            )
+            if (syncedAllTime != currentAllTime) {
+                persistAllTimeDownloads(syncedAllTime)
+            }
+        }
+    }
+
+    private fun persistAllTimeDownloads(list: List<DownloadItem>) {
+        try {
+            persistSetting("all_time_downloads", Json.encodeToString(list))
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -93,13 +192,15 @@ class BrowserViewModel(
         )
         clearAllTabWebViews()
         clearBrowserSession()
+        // Clearing session resets Current Session downloads while keeping 30-day All-Time downloads synced with phone storage
         _state.value = _state.value.copy(
             tabs = listOf(defaultTab),
             activeTabId = defaultTab.id,
             tabBackStack = listOf(defaultTab.id),
             activePageTitle = "New Tab",
             activePageContent = "",
-            isAudioPlaying = false
+            isAudioPlaying = false,
+            sessionDownloads = emptyList()
         )
     }
 
@@ -121,10 +222,12 @@ class BrowserViewModel(
                     if (!url.startsWith("http://") && !url.startsWith("https://")) {
                         url = "https://$url"
                     }
-                    if (_state.value.isDeAmpEnabled) {
+                    val host = normalizeDomain(url)
+                    val isException = _state.value.siteExceptions.any { host == it || host.endsWith(".$it") }
+                    if (_state.value.isDeAmpEnabled && !isException) {
                         url = UrlSanitizer.deAmp(url)
                     }
-                    if (_state.value.isTrackingProtectionEnabled) {
+                    if (_state.value.isTrackingProtectionEnabled && !isException) {
                         url = UrlSanitizer.stripTrackingParams(url)
                     }
                     updateCurrentTab { tab ->
@@ -384,15 +487,50 @@ class BrowserViewModel(
                 )
             }
             is BrowserIntent.ToggleSiteShield -> {
-                val existing = _state.value.siteShieldOverrides[intent.host]
-                if (existing != intent.config) {
-                    val updatedOverrides = _state.value.siteShieldOverrides.toMutableMap()
-                    updatedOverrides[intent.host] = intent.config
+                val cleanHost = normalizeDomain(intent.host)
+                if (cleanHost.isNotBlank()) {
+                    val existing = _state.value.siteShieldOverrides[cleanHost]
+                    if (existing != intent.config) {
+                        val updatedOverrides = _state.value.siteShieldOverrides.toMutableMap()
+                        updatedOverrides[cleanHost] = intent.config
+                        _state.value = _state.value.copy(
+                            siteShieldOverrides = updatedOverrides,
+                            shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                        )
+                        try {
+                            persistSetting("site_shield_overrides", Json.encodeToString(updatedOverrides))
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+            is BrowserIntent.AddSiteException -> {
+                val cleanHost = normalizeDomain(intent.host)
+                if (cleanHost.isNotBlank() && !_state.value.siteExceptions.contains(cleanHost)) {
+                    val updated = _state.value.siteExceptions + cleanHost
                     _state.value = _state.value.copy(
-                        siteShieldOverrides = updatedOverrides,
+                        siteExceptions = updated,
                         shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
                     )
+                    persistSetting("site_exceptions", updated.joinToString(","))
                 }
+            }
+            is BrowserIntent.RemoveSiteException -> {
+                val cleanHost = normalizeDomain(intent.host)
+                if (_state.value.siteExceptions.contains(cleanHost)) {
+                    val updated = _state.value.siteExceptions - cleanHost
+                    _state.value = _state.value.copy(
+                        siteExceptions = updated,
+                        shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                    )
+                    persistSetting("site_exceptions", updated.joinToString(","))
+                }
+            }
+            is BrowserIntent.ResetDefaultSiteExceptions -> {
+                _state.value = _state.value.copy(
+                    siteExceptions = DEFAULT_SITE_EXCEPTIONS,
+                    shouldReloadTrigger = _state.value.shouldReloadTrigger + 1
+                )
+                persistSetting("site_exceptions", DEFAULT_SITE_EXCEPTIONS.joinToString(","))
             }
             is BrowserIntent.ShredSiteData -> {
                 shredSiteData(intent.host)
@@ -407,6 +545,7 @@ class BrowserViewModel(
             is BrowserIntent.ClearAllBrowsingData -> {
                 clearBrowserSession()
                 clearAllTabWebViews()
+                _state.value = _state.value.copy(sessionDownloads = emptyList())
                 viewModelScope.launch {
                     try {
                         database?.historyQueries?.clearAllHistory()
@@ -490,13 +629,21 @@ class BrowserViewModel(
                 )
             }
             is BrowserIntent.AddDownload -> {
-                val existing = _state.value.downloads
-                if (existing.none { it.id == intent.item.id }) {
-                    _state.value = _state.value.copy(downloads = listOf(intent.item) + existing)
-                }
+                val now = currentTimeMillis()
+                val stampedItem = if (intent.item.timestamp > 0L) intent.item else intent.item.copy(timestamp = now)
+                val updatedSession = listOf(stampedItem) + _state.value.sessionDownloads.filter { it.id != stampedItem.id }
+                val updatedAllTime = pruneOlderThan30Days(
+                    listOf(stampedItem) + _state.value.downloads.filter { it.id != stampedItem.id },
+                    now
+                )
+                _state.value = _state.value.copy(
+                    sessionDownloads = updatedSession,
+                    downloads = updatedAllTime
+                )
+                persistAllTimeDownloads(updatedAllTime)
             }
             is BrowserIntent.UpdateDownloadProgress -> {
-                val updated = _state.value.downloads.map {
+                val updateFn: (DownloadItem) -> DownloadItem = {
                     if (it.id == intent.id) {
                         it.copy(
                             progress = intent.progress,
@@ -505,7 +652,35 @@ class BrowserViewModel(
                         )
                     } else it
                 }
-                _state.value = _state.value.copy(downloads = updated)
+                val updatedSession = _state.value.sessionDownloads.map(updateFn)
+                val updatedAllTime = _state.value.downloads.map(updateFn)
+                _state.value = _state.value.copy(
+                    sessionDownloads = updatedSession,
+                    downloads = updatedAllTime
+                )
+                persistAllTimeDownloads(updatedAllTime)
+            }
+            is BrowserIntent.RemoveDownloadItem -> {
+                val target = _state.value.downloads.find { it.id == intent.id }
+                    ?: _state.value.sessionDownloads.find { it.id == intent.id }
+                if (intent.deleteFromStorage && target != null) {
+                    deleteDownloadedFileFromStorage(target)
+                }
+                val updatedSession = _state.value.sessionDownloads.filter { it.id != intent.id }
+                val updatedAllTime = _state.value.downloads.filter { it.id != intent.id }
+                _state.value = _state.value.copy(
+                    sessionDownloads = updatedSession,
+                    downloads = updatedAllTime
+                )
+                persistAllTimeDownloads(updatedAllTime)
+            }
+            is BrowserIntent.ClearSessionDownloads -> {
+                _state.value = _state.value.copy(sessionDownloads = emptyList())
+            }
+            is BrowserIntent.SyncDownloadsWithStorage -> {
+                viewModelScope.launch {
+                    performDownloadsStorageSync()
+                }
             }
         }
     }

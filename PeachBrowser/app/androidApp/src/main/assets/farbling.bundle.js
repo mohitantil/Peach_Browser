@@ -19,16 +19,14 @@
         }
     } catch (e) {}
 
-    // Never run in about:blank / sandboxed challenge subframes where hostname is empty
     if (!currentHost) {
         return;
     }
 
-    // Allowlist modern AI / SPA portals and verification providers so Turnstile/Arkose/Polymer never break
     const spaAllowlist = [
         'chatgpt.com', 'openai.com', 'oaistatic.com', 'oaiusercontent.com',
         'qwen.ai', 'qwenlm.ai', 'aliyun.com', 'alicdn.com',
-        'z.ai', 'chat.z.ai',
+        'z.ai', 'chat.z.ai', 'deepseek.com', 'openrouter.ai',
         'gemini.google.com', 'aistudio.google.com', 'music.youtube.com', 'youtube.com', 'google.com',
         'claude.ai', 'anthropic.com', 'cloudflare.com', 'challenges.cloudflare.com'
     ];
@@ -36,6 +34,16 @@
     if (spaAllowlist.some(d => currentHost === d || currentHost.endsWith('.' + d))) {
         return;
     }
+
+    try {
+        if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isSiteException === 'function') {
+            if (window.PeachNativeBridge.isSiteException(currentHost)) {
+                return;
+            }
+        } else if (window.__PEACH_CONFIG__ && window.__PEACH_CONFIG__.isSiteException === true) {
+            return;
+        }
+    } catch (e) {}
 
     try {
         if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isFarblingActive === 'function') {

@@ -1,5 +1,5 @@
 /**
- * Peach AI Browser — Privacy Shield & Ad Neutralizer Engine
+ * Peach AI Browser — Privacy Shield & Ad Neutralizer Engine (v1.0.2 Restoration)
  */
 (function initPeachShield() {
     'use strict';
@@ -10,6 +10,32 @@
 
     const currentHost = (location.hostname || '').toLowerCase();
     if (!currentHost) {
+        return;
+    }
+
+    const defaultExceptionDomains = [
+        'chatgpt.com', 'openai.com', 'oaistatic.com', 'oaiusercontent.com',
+        'claude.ai', 'anthropic.com',
+        'gemini.google.com', 'aistudio.google.com',
+        'gstatic.com', 'googleapis.com',
+        'qwen.ai', 'qwenlm.ai', 'aliyun.com', 'alicdn.com',
+        'z.ai', 'chat.z.ai',
+        'deepseek.com', 'openrouter.ai', 'huggingface.co'
+    ];
+
+    let isExceptionSite = defaultExceptionDomains.some(d => currentHost === d || currentHost.endsWith('.' + d));
+
+    try {
+        if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isSiteException === 'function') {
+            if (window.PeachNativeBridge.isSiteException(currentHost)) {
+                isExceptionSite = true;
+            }
+        } else if (window.__PEACH_CONFIG__ && window.__PEACH_CONFIG__.isSiteException === true) {
+            isExceptionSite = true;
+        }
+    } catch (e) {}
+
+    if (isExceptionSite) {
         return;
     }
 
@@ -26,18 +52,6 @@
     } catch (e) {}
 
     window.__PEACH_SHIELD_ACTIVE__ = true;
-
-    const allowlistedDomains = [
-        'chatgpt.com', 'openai.com', 'oaistatic.com', 'oaiusercontent.com',
-        'claude.ai', 'anthropic.com',
-        'gemini.google.com', 'aistudio.google.com',
-        'music.youtube.com',
-        'gstatic.com', 'googleapis.com',
-        'qwen.ai', 'qwenlm.ai', 'aliyun.com', 'alicdn.com',
-        'z.ai', 'chat.z.ai',
-        'deepseek.com', 'huggingface.co'
-    ];
-    const isAllowlisted = allowlistedDomains.some(d => currentHost === d || currentHost.endsWith('.' + d));
 
     const COSMETIC_STYLES = `
         ins.adsbygoogle,
@@ -72,6 +86,7 @@
         ytd-banner-promo-renderer,
         ytd-statement-banner-renderer,
         ytd-mealbar-promo-renderer,
+        ytmusic-mealbar-promo-renderer,
         .ytd-merch-shelf-renderer,
         #masthead-ad,
         #player-ads,
@@ -98,9 +113,6 @@
     `;
 
     function injectCosmeticCSS() {
-        if (isAllowlisted) {
-            return true;
-        }
         try {
             if (document.getElementById('peach-shield-css')) {
                 return true;
@@ -128,39 +140,99 @@
         }, 100);
     }
 
-    const isStandardYouTube = (currentHost === 'youtube.com' || currentHost === 'www.youtube.com' || currentHost === 'm.youtube.com');
-    if (!isStandardYouTube) {
+    const isYouTubeDomain = (
+        currentHost === 'youtube.com' ||
+        currentHost === 'www.youtube.com' ||
+        currentHost === 'm.youtube.com' ||
+        currentHost === 'music.youtube.com'
+    );
+
+    if (!isYouTubeDomain) {
         return;
     }
 
-    function safeSkipYouTubeAds() {
+    const SKIP_BUTTON_SELECTORS = [
+        '.ytp-ad-skip-button',
+        '.ytp-ad-skip-button-modern',
+        '.ytp-skip-ad-button',
+        '.videoAdUiSkipButton',
+        '.ytp-ad-skip-button-slot button',
+        '.ytp-ad-overlay-close-button'
+    ].join(', ');
+
+    const COMPANION_AD_SELECTORS = [
+        'ytd-ad-slot-renderer',
+        'ytd-in-feed-ad-layout-renderer',
+        'ytd-banner-promo-renderer',
+        'ytmusic-mealbar-promo-renderer',
+        '#player-ads',
+        '#masthead-ad'
+    ].join(', ');
+
+    function neutralizeYouTubeAds() {
         try {
-            const player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+            const skipButtons = document.querySelectorAll(SKIP_BUTTON_SELECTORS);
+            skipButtons.forEach(btn => {
+                try { btn.click(); } catch (e) {}
+            });
+
+            const companionAds = document.querySelectorAll(COMPANION_AD_SELECTORS);
+            companionAds.forEach(node => {
+                try { node.remove(); } catch (e) {}
+            });
+
+            const player = document.getElementById('movie_player') ||
+                           document.querySelector('.html5-video-player') ||
+                           document.querySelector('ytmusic-player');
             if (!player) return;
 
-            const isAdShowing = player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting');
+            const isAdShowing = player.classList.contains('ad-showing') ||
+                                player.classList.contains('ad-interrupting') ||
+                                (typeof player.getAdState === 'function' && player.getAdState() === 1) ||
+                                document.querySelector('.ad-showing, .ad-interrupting') !== null;
+
             if (isAdShowing) {
                 if (typeof player.skipAd === 'function') {
                     try { player.skipAd(); } catch (e) {}
                 }
 
-                const skipBtn = player.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-skip-button-slot button');
-                if (skipBtn) {
-                    try {
-                        skipBtn.click();
-                    } catch (e) {}
-                }
-
-                const adVideo = player.querySelector('video.html5-main-video') || player.querySelector('video');
-                if (adVideo && isFinite(adVideo.duration) && adVideo.duration > 0) {
+                const adVideo = player.querySelector('video.html5-main-video') ||
+                                player.querySelector('video') ||
+                                document.querySelector('video');
+                if (adVideo) {
                     try {
                         adVideo.muted = true;
-                        adVideo.currentTime = adVideo.duration;
+                        adVideo.playbackRate = 16.0;
+                        if (isFinite(adVideo.duration) && adVideo.duration > 0) {
+                            adVideo.currentTime = adVideo.duration;
+                        }
+                        adVideo.dispatchEvent(new Event('ended'));
                     } catch (e) {}
                 }
             }
         } catch (e) {}
     }
 
-    window.setInterval(safeSkipYouTubeAds, 500);
+    const attachObserver = () => {
+        if (!document.documentElement) return;
+        try {
+            const observer = new MutationObserver(() => {
+                neutralizeYouTubeAds();
+            });
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class', 'src']
+            });
+        } catch (e) {}
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', attachObserver);
+    } else {
+        attachObserver();
+    }
+
+    window.setInterval(neutralizeYouTubeAds, 250);
 })();

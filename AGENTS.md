@@ -210,4 +210,39 @@
     - Preserved IndexedDB / Polymer Backing Store: Removed premature `resetToCleanSession()` during `BrowserViewModel.loadPersistedSettings()`, ensuring session data and storage quota stores are never wiped while active WebView processes are booting.
     - Verified live toggle reload via `appliedReloadTrigger` on `PeachNativeWebView`, persisting across navigation back from `SettingsScreen`.
     - Android APK debug build validated: `BUILD SUCCESSFUL in 14s` with zero errors.
+- **2026-10-15**:
+  - Restored v1.0.2 In-Stream YouTube Ad Neutralizer & Service Worker Interception (Phases 1 & 2):
+    - Hooked `ServiceWorkerControllerCompat` with `ServiceWorkerClientCompat` on Android to intercept requests from YouTube's `sw.js` service worker while exempting `isForMainFrame` and domains in `siteExceptions`.
+    - Introduced CORS-safe empty `WebResourceResponse` headers (`Access-Control-Allow-Origin: *`, `Methods`, `Headers`) so blocked fetch calls do not trigger unhandled CORS rejections on SPAs.
+    - Restored DOM-level in-stream ad neutralizer (MutationObserver + 250ms poller) for `youtube.com` and `music.youtube.com`: skips video ads, mutes ad stream, jumps `currentTime = duration`, auto-clicks skip buttons, and strips companion ad banners.
+  - Implemented Persistent "Site Exceptions" (Compatibility Mode) (Phases 3 & 4):
+    - Added `siteExceptions: Set<String>` and `DEFAULT_SITE_EXCEPTIONS` (`gemini.google.com`, `aistudio.google.com`, `chatgpt.com`, `claude.ai`, `deepseek.com`, `z.ai`, `qwen.ai`, `openrouter.ai`) in `BrowserMvi.kt`.
+    - Persisted `site_exceptions` and `site_shield_overrides` into SQLite via `Settings.sq` (`SettingsEntity`) in `BrowserViewModel.kt`.
+    - Integrated "Site Exceptions (Compatibility Mode)" section in `SettingsScreen.kt` with domain chips, removal buttons, "+ Add Domain Exception" dialog, and "Reset Defaults".
+    - Added live one-tap "Add to Site Exceptions" / "In Site Exceptions" toggle for the active tab domain in `ShieldSheet.kt`.
+    - Added early returns for site exceptions and `about:blank` challenge frames in `farbling.bundle.js` and `privacy_shield.bundle.js`, preserving Cloudflare Turnstile and AI chat interfaces.
+    - Synchronized all bundle assets across Android (`app/androidApp/src/main/assets/`) and iOS (`app/iosApp/iosApp/`).
+  - Restored Brave Search Engine (Phase 5):
+    - Re-added `SearchEngine.BRAVE` (`id = "Brave"`, `🦁`, template `https://search.brave.com/search?q=%s`) in `SearchEngineUtil.kt`.
+    - Successfully validated with full debug build: `BUILD SUCCESSFUL in 48s`.
+  - Comprehensive Audit & Final Stabilization:
+    - Resolved "Returning to Home Directly" Bug: Fixed `isSamePageOrRedirect` in `PeachNativeWebView.android.kt`. The previous implementation stripped the query string (`substringBefore("?")`), mistakenly treating distinct YouTube videos (`/watch?v=1` vs `/watch?v=2`) and distinct search queries (`?q=apple` vs `?q=banana`) as identical pages. This caused `canGoBackSmartly()` to skip valid history entries and fall through to `GoHome`. Preserving query string comparison allows standard step-by-step back navigation across videos and search results.
+    - Resolved Address Bar Fluctuation while Typing: Added `isAddressBarFocused` focus tracking via `Modifier.onFocusChanged` in `App.kt` so background page URL state updates do not overwrite text while the user is actively typing in the omnibox.
+    - Added Visual Compatibility Mode Indicator: Added active host extraction and live `⚡` lightning bolt icon in the omnibox when visiting a Site Exception domain, giving immediate visual confirmation that Compatibility Mode is active and opening `ShieldSheet` on tap.
+    - Fixed WebView Shield Toggle Reload: Updated `update` block in `PeachWebView.android.kt` to reload `webView.url` directly rather than navigating to a stale `browserState.currentUrl`.
+    - Added LocalFocusManager to omnibox `onDone` in `App.kt` to clear focus and dismiss keyboard on URL submission.
+    - Enhanced `isSamePageOrRedirect` to strip `#` fragments before comparing query parameters (`clean.substringBefore("#").substringAfter("?")`), handling fragment jumps on query-string URLs.
+    - Added `Referer` header inspection in `AdBlocker.ensureServiceWorkerHooked()`, exempting sub-resource requests made by Service Workers on Site Exception domains.
+    - Resolved 0px Viewport Height Collapse: Overrode `onMeasure` in `PeachNativeWebView` to force `MeasureSpec.EXACTLY` when size > 0 and enforced `MATCH_PARENT` layoutParams in `AndroidTabWebViewPool.getOrCreate`, preventing Chromium's `AwLayoutSizer` from collapsing `100vh`/`100dvh` on modern SPAs.
+    - Disabled Desktop Overview Mode: Set `setSupportMultipleWindows(false)` and `loadWithOverviewMode = false` for 1:1 mobile device-width rendering on chat portals (`chatgpt.com`, `deepseek.com`, `gemini.google.com`).
+    - Added `currentMainFrameHost` Tracking: Synchronized main-frame host across `PeachNativeWebView` and `AdBlocker`, ensuring referrer-less sub-resources on Site Exception domains are never blocked.
+    - Prioritized `⚡` indicator in omnibox leading icon so Compatibility Mode status is always visible, even when Private Mode is active.
+    - Verified complete build with 0 errors via `./gradlew :app:androidApp:assembleDebug` (`BUILD SUCCESSFUL in 11s`).
+  - Downloads Engine & UI Overhaul (Real-Time Storage Sync & Brave Long-Press Image Menu):
+    - Resolved 0% Download Progress Bug: Integrated active byte tracking and status polling via `DownloadManager.Query()`, calculating real-time percentage from `COLUMN_BYTES_DOWNLOADED_SO_FAR` and `COLUMN_TOTAL_SIZE_BYTES`.
+    - Real-Time Phone Storage Synchronization: Added `syncDownloadsWithStorage()` expect/actual on Android, checking physical file existence across explicit paths, content URIs, and standard public Downloads (`Environment.DIRECTORY_DOWNLOADS`). Deleted files are automatically pruned from the UI every 1 second in the background.
+    - Brave-Style Long-Press Image Context Menu: Hooked `setOnLongClickListener` on `PeachNativeWebView` to detect `HitTestResult.IMAGE_TYPE` and `SRC_IMAGE_ANCHOR_TYPE`, displaying a sleek Material 3 `ModalBottomSheet` with "Download image", "Open image in new tab", and "Copy image link" (zero Coil dependency).
+    - Base64 & Data URI Download Support: `enqueuePeachDownload` extracts inline base64 data payloads, writes decoded bytes to public Downloads, notifies `MediaScannerConnection`, and registers synthetic entries in `BrowserViewModel`.
+    - Split Downloads Dashboard: Overhauled `DownloadsScreen.kt` with pill navigation ("Split View", "Current Session", "Past 30 Days"), real-time storage status indicators, time elapsed / 30-day auto-clear countdown tickers, and direct file deletion actions.
+    - Verified compilation via `./gradlew :app:androidApp:assembleDebug` (`BUILD SUCCESSFUL in 15s`).
 

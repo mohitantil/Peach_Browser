@@ -16,6 +16,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
@@ -95,6 +96,7 @@ fun App() {
 
         val webViewController = rememberPeachWebViewController()
         val shareLauncher = rememberShareLauncher()
+        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
         val navController = rememberNavController()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -108,6 +110,7 @@ fun App() {
         val hasTabBackHistory = browserState.tabBackStack.size > 1
 
         var addressText by remember { mutableStateOf("") }
+        var isAddressBarFocused by remember { mutableStateOf(false) }
         val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val menuSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val sleepTimerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -117,6 +120,17 @@ fun App() {
         var showSleepTimerSheet by remember { mutableStateOf(false) }
         var showShieldSheet by remember { mutableStateOf(false) }
 
+        val currentDisplayUrl = webViewController.currentUrl.ifBlank { browserState.currentUrl }
+        val activeHost = remember(currentDisplayUrl) {
+            try {
+                val clean = currentDisplayUrl.trim().lowercase().removePrefix("https://").removePrefix("http://")
+                clean.substringBefore("/").substringBefore("?").substringBefore(":").removePrefix("www.")
+            } catch (e: Exception) { "" }
+        }
+        val isCurrentHostException = remember(browserState.siteExceptions, activeHost) {
+            activeHost.isNotBlank() && browserState.siteExceptions.any { activeHost == it || activeHost.endsWith(".$it") }
+        }
+
         // Wire media pause action from browser controller
         LaunchedEffect(webViewController) {
             browserViewModel.onPausePlaybackAction = {
@@ -124,14 +138,19 @@ fun App() {
             }
         }
 
-        // Sync address bar text with active page
-        LaunchedEffect(browserState.activeTabId, browserState.currentUrl, webViewController.currentUrl, isLandingPage) {
-            addressText = if (isLandingPage) {
-                ""
-            } else if (webViewController.currentUrl.isNotBlank()) {
-                webViewController.currentUrl
-            } else {
-                browserState.currentUrl
+        // Sync address bar text with active page without clobbering active user typing
+        LaunchedEffect(browserState.activeTabId) {
+            addressText = if (isLandingPage) "" else (webViewController.currentUrl.ifBlank { browserState.currentUrl })
+        }
+        LaunchedEffect(browserState.currentUrl, webViewController.currentUrl, isLandingPage) {
+            if (!isAddressBarFocused) {
+                addressText = if (isLandingPage) {
+                    ""
+                } else if (webViewController.currentUrl.isNotBlank()) {
+                    webViewController.currentUrl
+                } else {
+                    browserState.currentUrl
+                }
             }
         }
 
@@ -187,7 +206,10 @@ fun App() {
                         OutlinedTextField(
                             value = addressText,
                             onValueChange = { addressText = it },
-                            modifier = Modifier.weight(1f).height(46.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                                .onFocusChanged { isAddressBarFocused = it.isFocused },
                             singleLine = true,
                             textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.SansSerif, color = Color(0xFF1E1E2E)),
                             placeholder = { Text("Search or type URL", fontFamily = FontFamily.SansSerif, fontSize = 13.sp) },
@@ -203,7 +225,7 @@ fun App() {
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = if (browserState.isPrivateMode) "🔒" else "🛡️",
+                                        text = if (isCurrentHostException) "⚡" else if (browserState.isPrivateMode) "🔒" else "🛡️",
                                         fontSize = 14.sp
                                     )
                                 }
@@ -251,6 +273,7 @@ fun App() {
                                             webViewController.loadUrl(searchUrl)
                                         }
                                     }
+                                    focusManager.clearFocus()
                                 }
                             )
                         )
@@ -450,6 +473,7 @@ fun App() {
                             isFarblingEnabled = browserState.isFarblingEnabled,
                             isDeAmpEnabled = browserState.isDeAmpEnabled,
                             searchEngine = browserState.searchEngine,
+                            siteExceptions = browserState.siteExceptions,
                             onIntent = { browserViewModel.processIntent(it) },
                             onNavigateBack = { navController.popBackStack() }
                         )
@@ -478,7 +502,9 @@ fun App() {
                     }
                     composable<DownloadsRoute> {
                         DownloadsScreen(
-                            downloads = browserState.downloads,
+                            sessionDownloads = browserState.sessionDownloads,
+                            allTimeDownloads = browserState.downloads,
+                            onIntent = { browserViewModel.processIntent(it) },
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
@@ -605,6 +631,13 @@ fun App() {
                     onDismiss = { showShieldSheet = false },
                     onToggleShields = { host, config ->
                         browserViewModel.processIntent(BrowserIntent.ToggleSiteShield(host, config))
+                    },
+                    onToggleSiteException = { host, addException ->
+                        if (addException) {
+                            browserViewModel.processIntent(BrowserIntent.AddSiteException(host))
+                        } else {
+                            browserViewModel.processIntent(BrowserIntent.RemoveSiteException(host))
+                        }
                     },
                     onShredSiteData = { host ->
                         browserViewModel.processIntent(BrowserIntent.ShredSiteData(host))

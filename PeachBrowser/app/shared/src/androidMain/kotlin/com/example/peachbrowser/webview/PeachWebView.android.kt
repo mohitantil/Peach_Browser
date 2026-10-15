@@ -21,19 +21,40 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.MimeTypeMap
 import android.widget.FrameLayout
+import android.widget.Toast
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.media.MediaScannerConnection
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import java.io.File
+import java.io.FileOutputStream
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.webkit.ServiceWorkerClientCompat
+import androidx.webkit.ServiceWorkerControllerCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -47,52 +68,147 @@ import com.example.peachbrowser.util.clearBrowserSession
 import org.koin.compose.koinInject
 import java.io.ByteArrayInputStream
 
-private val ESSENTIAL_STATIC_AND_SPA_DOMAINS = setOf(
-    "gstatic.com",
-    "oaiusercontent.com",
-    "oaistatic.com",
-    "ytimg.com",
-    "googleapis.com",
-    "googlevideo.com",
-    "ggpht.com",
-    "googleusercontent.com",
-    "cloudflare.com",
-    "challenges.cloudflare.com",
-    "alicdn.com",
-    "aliyun.com",
-    "chatgpt.com",
-    "openai.com",
-    "qwen.ai",
-    "qwenlm.ai",
-    "z.ai",
-    "gemini.google.com",
-    "aistudio.google.com",
-    "music.youtube.com",
-    "youtube.com",
-    "youtu.be"
-)
+object AdBlocker {
+    val ESSENTIAL_STATIC_AND_SPA_DOMAINS = setOf(
+        "gstatic.com",
+        "oaiusercontent.com",
+        "oaistatic.com",
+        "ytimg.com",
+        "googleapis.com",
+        "googlevideo.com",
+        "ggpht.com",
+        "googleusercontent.com",
+        "cloudflare.com",
+        "challenges.cloudflare.com",
+        "alicdn.com",
+        "aliyun.com",
+        "chatgpt.com",
+        "openai.com",
+        "claude.ai",
+        "anthropic.com",
+        "deepseek.com",
+        "openrouter.ai",
+        "qwen.ai",
+        "qwenlm.ai",
+        "z.ai",
+        "chat.z.ai",
+        "gemini.google.com",
+        "aistudio.google.com",
+        "music.youtube.com",
+        "youtube.com",
+        "youtu.be"
+    )
 
-private val BLOCKED_TRACKER_DOMAINS = setOf(
-    "doubleclick.net",
-    "googlesyndication.com",
-    "googleadservices.com",
-    "google-analytics.com",
-    "googletagmanager.com",
-    "taboola.com",
-    "outbrain.com",
-    "scorecardresearch.com",
-    "criteo.com",
-    "criteo.net",
-    "adnxs.com",
-    "adsrvr.org",
-    "moatads.com",
-    "quantserve.com"
-)
+    val AD_HOSTS = setOf(
+        "doubleclick.net",
+        "googlesyndication.com",
+        "googleadservices.com",
+        "google-analytics.com",
+        "googletagmanager.com",
+        "adservice.google.com",
+        "pagead2.googlesyndication.com",
+        "tpc.googlesyndication.com",
+        "taboola.com",
+        "outbrain.com",
+        "scorecardresearch.com",
+        "criteo.com",
+        "criteo.net",
+        "adnxs.com",
+        "adsrvr.org",
+        "moatads.com",
+        "quantserve.com",
+        "amazon-adsystem.com",
+        "rubiconproject.com",
+        "pubmatic.com",
+        "openx.net",
+        "casalemedia.com",
+        "smartadserver.com",
+        "advertising.com"
+    )
 
-private fun isDomainMatching(host: String, domainSet: Set<String>): Boolean {
-    if (host.isBlank()) return false
-    val clean = host.lowercase()
-    return domainSet.any { clean == it || clean.endsWith(".$it") }
+    @Volatile
+    var globalShieldEnabled: Boolean = true
+
+    @Volatile
+    var globalSiteExceptions: Set<String> = emptySet()
+
+    @Volatile
+    var currentMainFrameHost: String = ""
+
+    private var serviceWorkerHooked = false
+
+    fun isDomainMatching(host: String, domainSet: Set<String>): Boolean {
+        if (host.isBlank()) return false
+        val clean = host.trim().lowercase()
+        return domainSet.any { clean == it || clean.endsWith(".$it") }
+    }
+
+    fun isAdRequest(url: Uri): Boolean {
+        val host = (url.host ?: "").lowercase()
+        if (host.isBlank()) return false
+        if (isDomainMatching(host, ESSENTIAL_STATIC_AND_SPA_DOMAINS)) {
+            val path = url.path ?: ""
+            if ((host.endsWith("youtube.com") || host == "youtube.com") &&
+                (path.startsWith("/api/stats/ads") || path.startsWith("/pagead/") || path.startsWith("/ptracking"))
+            ) {
+                return true
+            }
+            return false
+        }
+        return isDomainMatching(host, AD_HOSTS)
+    }
+
+    fun createEmptyResponse(): WebResourceResponse {
+        val headers = mapOf(
+            "Access-Control-Allow-Origin" to "*",
+            "Access-Control-Allow-Methods" to "GET, POST, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers" to "*",
+            "Cache-Control" to "no-store"
+        )
+        return WebResourceResponse(
+            "text/plain",
+            "UTF-8",
+            200,
+            "OK",
+            headers,
+            ByteArrayInputStream(ByteArray(0))
+        )
+    }
+
+    @Synchronized
+    fun ensureServiceWorkerHooked() {
+        if (serviceWorkerHooked) return
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
+            try {
+                val swController = ServiceWorkerControllerCompat.getInstance()
+                swController.serviceWorkerWebSettings.allowContentAccess = false
+                swController.serviceWorkerWebSettings.allowFileAccess = false
+                swController.setServiceWorkerClient(object : ServiceWorkerClientCompat() {
+                    override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
+                        if (request.isForMainFrame) return null
+                        val reqUri = request.url ?: return null
+                        val reqHost = (reqUri.host ?: "").lowercase()
+                        val refererHost = try {
+                            Uri.parse(request.requestHeaders?.get("Referer") ?: "").host?.lowercase() ?: ""
+                        } catch (e: Exception) { "" }
+                        if (isDomainMatching(reqHost, globalSiteExceptions) ||
+                            (refererHost.isNotBlank() && isDomainMatching(refererHost, globalSiteExceptions)) ||
+                            (currentMainFrameHost.isNotBlank() && isDomainMatching(currentMainFrameHost, globalSiteExceptions))
+                        ) {
+                            return null
+                        }
+                        if (globalShieldEnabled && isAdRequest(reqUri)) {
+                            return createEmptyResponse()
+                        }
+                        return null
+                    }
+                })
+                serviceWorkerHooked = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 }
 
 private fun loadMediaDetectorScript(context: Context): String {
@@ -119,6 +235,108 @@ private fun loadBackgroundScript(context: Context): String {
     }
 }
 
+private fun enqueuePeachDownload(
+    ctx: Context,
+    downloadUrl: String,
+    userAgent: String?,
+    contentDisposition: String?,
+    mimetype: String?,
+    browserViewModel: BrowserViewModel
+) {
+    try {
+        val now = com.example.peachbrowser.currentTimeMillis()
+        if (downloadUrl.startsWith("data:")) {
+            val commaIndex = downloadUrl.indexOf(',')
+            if (commaIndex != -1) {
+                val meta = downloadUrl.substring(5, commaIndex)
+                val dataPart = downloadUrl.substring(commaIndex + 1)
+                val mime = meta.substringBefore(';').ifBlank { "image/png" }
+                val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "png"
+                val fileName = "peach_image_$now.$ext"
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                downloadsDir.mkdirs()
+                val destFile = File(downloadsDir, fileName)
+                val bytes = if (meta.contains("base64", ignoreCase = true)) {
+                    Base64.decode(dataPart, Base64.DEFAULT)
+                } else {
+                    Uri.decode(dataPart).toByteArray()
+                }
+                FileOutputStream(destFile).use { it.write(bytes) }
+                MediaScannerConnection.scanFile(ctx, arrayOf(destFile.absolutePath), arrayOf(mime), null)
+                browserViewModel.processIntent(
+                    BrowserIntent.AddDownload(
+                        DownloadItem(
+                            id = -now,
+                            fileName = fileName,
+                            url = "data:$mime",
+                            mimeType = mime,
+                            progress = 100,
+                            isCompleted = true,
+                            localUri = Uri.fromFile(destFile).toString(),
+                            filePath = destFile.absolutePath,
+                            bytesDownloaded = bytes.size.toLong(),
+                            totalBytes = bytes.size.toLong(),
+                            timestamp = now
+                        )
+                    )
+                )
+                Toast.makeText(ctx, "Saved $fileName to Downloads", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        val resolvedMime = if (!mimetype.isNullOrBlank() && mimetype != "application/octet-stream") {
+            mimetype
+        } else {
+            val ext = MimeTypeMap.getFileExtensionFromUrl(downloadUrl)
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase()) ?: (mimetype ?: "*/*")
+        }
+        val guessedFileName = URLUtil.guessFileName(downloadUrl, contentDisposition, resolvedMime)
+        val destFile = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            guessedFileName
+        )
+
+        val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val request = DownloadManager.Request(Uri.parse(downloadUrl)).apply {
+            if (!resolvedMime.isNullOrBlank()) {
+                setMimeType(resolvedMime)
+            }
+            val cookies = CookieManager.getInstance().getCookie(downloadUrl)
+            if (!cookies.isNullOrBlank()) {
+                addRequestHeader("cookie", cookies)
+            }
+            if (!userAgent.isNullOrBlank()) {
+                addRequestHeader("User-Agent", userAgent)
+            }
+            setDescription("Downloading with Peach Browser...")
+            setTitle(guessedFileName)
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, guessedFileName)
+        }
+        val downloadId = dm.enqueue(request)
+        browserViewModel.processIntent(
+            BrowserIntent.AddDownload(
+                DownloadItem(
+                    id = downloadId,
+                    fileName = guessedFileName,
+                    url = downloadUrl,
+                    mimeType = resolvedMime ?: "",
+                    progress = 5,
+                    isCompleted = false,
+                    localUri = null,
+                    filePath = destFile.absolutePath,
+                    timestamp = now
+                )
+            )
+        )
+        Toast.makeText(ctx, "Downloading $guessedFileName...", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        e.printStackTrace()
+        Toast.makeText(ctx, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
 class PeachNativeWebView(context: Context) : WebView(context) {
     @Volatile var isBackgroundPlayActive: Boolean = false
     @Volatile var isShieldEnabled: Boolean = true
@@ -126,6 +344,8 @@ class PeachNativeWebView(context: Context) : WebView(context) {
     @Volatile var isTrackingProtectionEnabled: Boolean = true
     @Volatile var isDeAmpEnabled: Boolean = true
     @Volatile var siteShieldOverrides: Map<String, SiteShieldConfig> = emptyMap()
+    @Volatile var siteExceptions: Set<String> = emptySet()
+    @Volatile var currentMainFrameHost: String = ""
     @Volatile var appliedReloadTrigger: Int = 0
 
     var customView: View? = null
@@ -135,9 +355,55 @@ class PeachNativeWebView(context: Context) : WebView(context) {
     var onFullscreenChanged: ((Boolean) -> Unit)? = null
     var onPermissionRequestHandler: ((PermissionRequest) -> Unit)? = null
     var onPermissionRequestCanceledHandler: ((PermissionRequest) -> Unit)? = null
+    var onImageLongPressHandler: ((String) -> Unit)? = null
+
+    init {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val wSize = MeasureSpec.getSize(widthMeasureSpec)
+        val hSize = MeasureSpec.getSize(heightMeasureSpec)
+        val fixedWidthSpec = if (wSize > 0) {
+            MeasureSpec.makeMeasureSpec(wSize, MeasureSpec.EXACTLY)
+        } else {
+            widthMeasureSpec
+        }
+        val fixedHeightSpec = if (hSize > 0) {
+            MeasureSpec.makeMeasureSpec(hSize, MeasureSpec.EXACTLY)
+        } else {
+            heightMeasureSpec
+        }
+        super.onMeasure(fixedWidthSpec, fixedHeightSpec)
+    }
+
+    private fun normalizeHost(raw: String): String {
+        return raw.trim()
+            .lowercase()
+            .removePrefix("https://")
+            .removePrefix("http://")
+            .substringBefore("/")
+            .substringBefore("?")
+            .substringBefore(":")
+            .removePrefix("www.")
+    }
+
+    fun isSiteException(host: String): Boolean {
+        val cleanHost = normalizeHost(host)
+        val mainHost = normalizeHost(currentMainFrameHost)
+        if (mainHost.isNotBlank() && siteExceptions.any { mainHost == it || mainHost.endsWith(".$it") }) {
+            return true
+        }
+        if (cleanHost.isBlank()) return false
+        return siteExceptions.any { cleanHost == it || cleanHost.endsWith(".$it") }
+    }
 
     fun isShieldActiveForHost(host: String): Boolean {
-        val cleanHost = host.trim().lowercase()
+        if (isSiteException(host)) return false
+        val cleanHost = normalizeHost(host).ifBlank { normalizeHost(currentMainFrameHost) }
         val override = siteShieldOverrides.entries.find {
             cleanHost == it.key || cleanHost.endsWith(".${it.key}")
         }?.value
@@ -149,7 +415,8 @@ class PeachNativeWebView(context: Context) : WebView(context) {
     }
 
     fun isFarblingActiveForHost(host: String): Boolean {
-        val cleanHost = host.trim().lowercase()
+        if (isSiteException(host)) return false
+        val cleanHost = normalizeHost(host).ifBlank { normalizeHost(currentMainFrameHost) }
         val override = siteShieldOverrides.entries.find {
             cleanHost == it.key || cleanHost.endsWith(".${it.key}")
         }?.value
@@ -190,11 +457,24 @@ class PeachNativeWebView(context: Context) : WebView(context) {
         val clean1 = url1.removeSuffix("/").removePrefix("https://").removePrefix("http://")
         val clean2 = url2.removeSuffix("/").removePrefix("https://").removePrefix("http://")
         if (clean1 == clean2) return true
-        val base1 = clean1.substringBefore("#").substringBefore("?")
-        val base2 = clean2.substringBefore("#").substringBefore("?")
-        if (base1 == base2) return true
-        if (base1.removePrefix("m.").removePrefix("www.") == base2.removePrefix("m.").removePrefix("www.")) return true
-        return false
+
+        val noHash1 = clean1.substringBefore("#")
+        val noHash2 = clean2.substringBefore("#")
+        val query1 = noHash1.substringAfter("?", "")
+        val query2 = noHash2.substringAfter("?", "")
+        if (query1 != query2) {
+            return false
+        }
+
+        val base1 = noHash1.substringBefore("?")
+        val base2 = noHash2.substringBefore("?")
+        if (base1 != base2) {
+            if (base1.removePrefix("m.").removePrefix("www.") == base2.removePrefix("m.").removePrefix("www.")) {
+                return true
+            }
+            return false
+        }
+        return true
     }
 
     fun canGoBackSmartly(): Boolean {
@@ -294,7 +574,15 @@ actual fun PeachWebView(
     val backgroundScript = remember(context) { loadBackgroundScript(context) }
     val farblingScript = remember(context) { loadFarblingScript(context) }
     val mediaDetectorScript = remember(context) { loadMediaDetectorScript(context) }
+    val shieldScript = remember(context) {
+        try {
+            context.assets.open("privacy_shield.bundle.js").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            ""
+        }
+    }
     var lastLoadedUrl by remember(tabId) { mutableStateOf<String?>(null) }
+    var longPressedImageUrl by remember { mutableStateOf<String?>(null) }
     val audioFocusManager = koinInject<com.example.peachbrowser.util.PeachAudioFocusManager>()
 
     var pendingPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
@@ -367,6 +655,10 @@ actual fun PeachWebView(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
+            AdBlocker.globalShieldEnabled = browserState.isAdBlockEnabled
+            AdBlocker.globalSiteExceptions = browserState.siteExceptions
+            AdBlocker.ensureServiceWorkerHooked()
+
             AndroidTabWebViewPool.getOrCreate(tabId, ctx) { c ->
                 PeachNativeWebView(c).apply {
                     onPermissionRequestHandler = handlePermissionRequest
@@ -377,8 +669,29 @@ actual fun PeachWebView(
                     isTrackingProtectionEnabled = browserState.isTrackingProtectionEnabled
                     isDeAmpEnabled = browserState.isDeAmpEnabled
                     siteShieldOverrides = browserState.siteShieldOverrides
+                    siteExceptions = browserState.siteExceptions
                     appliedReloadTrigger = browserState.shouldReloadTrigger
                     isNestedScrollingEnabled = true
+
+                    onImageLongPressHandler = { imgUrl ->
+                        longPressedImageUrl = imgUrl
+                    }
+                    setOnLongClickListener { v ->
+                        val wv = v as? WebView ?: return@setOnLongClickListener false
+                        val hit = wv.hitTestResult
+                        val type = hit.type
+                        if (type == WebView.HitTestResult.IMAGE_TYPE || type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                            val extraUrl = hit.extra
+                            if (!extraUrl.isNullOrBlank()) {
+                                onImageLongPressHandler?.invoke(extraUrl)
+                                return@setOnLongClickListener true
+                            }
+                        }
+                        false
+                    }
+                    setDownloadListener { downloadUrl, userAgent, contentDisposition, mimetype, _ ->
+                        enqueuePeachDownload(ctx, downloadUrl, userAgent, contentDisposition, mimetype, browserViewModel)
+                    }
 
                     settings.apply {
                         javaScriptEnabled = true
@@ -386,12 +699,12 @@ actual fun PeachWebView(
                         databaseEnabled = true
                         cacheMode = WebSettings.LOAD_DEFAULT
                         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                        setSupportMultipleWindows(true)
+                        setSupportMultipleWindows(false)
                         javaScriptCanOpenWindowsAutomatically = true
                         allowFileAccess = false
                         mediaPlaybackRequiresUserGesture = false
                         useWideViewPort = true
-                        loadWithOverviewMode = true
+                        loadWithOverviewMode = false
                         val defaultUa = userAgentString ?: ""
                         userAgentString = defaultUa
                             .replace("; wv)", ")")
@@ -421,22 +734,47 @@ actual fun PeachWebView(
                             view: WebView?,
                             request: WebResourceRequest?
                         ): WebResourceResponse? {
-                            val reqUri = request?.url ?: return super.shouldInterceptRequest(view, request)
+                            if (request == null) {
+                                return null
+                            }
+                            val reqUri = request.url ?: return super.shouldInterceptRequest(view, request)
                             val reqHost = (reqUri.host ?: "").lowercase()
-                            if (reqHost.isBlank()) return super.shouldInterceptRequest(view, request)
+                            val nativeView = view as? PeachNativeWebView
 
-                            if (isDomainMatching(reqHost, ESSENTIAL_STATIC_AND_SPA_DOMAINS)) {
+                            if (request.isForMainFrame) {
+                                if (reqHost.isNotBlank()) {
+                                    nativeView?.currentMainFrameHost = reqHost
+                                    AdBlocker.currentMainFrameHost = reqHost
+                                }
                                 return super.shouldInterceptRequest(view, request)
                             }
 
-                            val nativeView = view as? PeachNativeWebView
-                            val shieldActive = nativeView?.isShieldEnabled ?: true
-                            if (shieldActive && isDomainMatching(reqHost, BLOCKED_TRACKER_DOMAINS)) {
-                                return WebResourceResponse(
-                                    "text/plain",
-                                    "UTF-8",
-                                    ByteArrayInputStream(ByteArray(0))
-                                )
+                            if (reqHost.isBlank()) return super.shouldInterceptRequest(view, request)
+
+                            val refererHeader = request.requestHeaders?.get("Referer")
+                                ?: request.requestHeaders?.get("referer")
+                                ?: ""
+                            val pageOriginHost = try {
+                                Uri.parse(refererHeader).host?.lowercase() ?: ""
+                            } catch (e: Exception) {
+                                ""
+                            }
+                            val effectiveOriginHost = pageOriginHost.ifBlank { nativeView?.currentMainFrameHost ?: "" }
+
+                            if (nativeView?.isSiteException(reqHost) == true ||
+                                (effectiveOriginHost.isNotBlank() && nativeView?.isSiteException(effectiveOriginHost) == true)
+                            ) {
+                                return super.shouldInterceptRequest(view, request)
+                            }
+
+                            val shieldActive = if (effectiveOriginHost.isNotBlank()) {
+                                nativeView?.isShieldActiveForHost(effectiveOriginHost) ?: true
+                            } else {
+                                nativeView?.isShieldActiveForHost(reqHost) ?: true
+                            }
+
+                            if (shieldActive && AdBlocker.isAdRequest(reqUri)) {
+                                return AdBlocker.createEmptyResponse()
                             }
 
                             return super.shouldInterceptRequest(view, request)
@@ -463,17 +801,25 @@ actual fun PeachWebView(
                                     title = view?.title ?: ""
                                 )
                             )
-                            val currentHost = try { Uri.parse(pageUrl ?: "").host ?: "" } catch (e: Exception) { "" }
+                            val currentHost = try { Uri.parse(pageUrl ?: "").host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                            if (currentHost.isNotBlank()) {
+                                currentMainFrameHost = currentHost
+                                AdBlocker.currentMainFrameHost = currentHost
+                            }
+                            val isException = isSiteException(currentHost)
                             val isShieldActive = isShieldActiveForHost(currentHost)
                             val isFarblingActive = isFarblingActiveForHost(currentHost)
                             val isBgActive = isBackgroundPlayActive
 
                             view?.evaluateJavascript(
-                                "window.__PEACH_CONFIG__ = { shieldActive: $isShieldActive, farblingActive: $isFarblingActive, bgPlayActive: $isBgActive };",
+                                "window.__PEACH_CONFIG__ = { shieldActive: $isShieldActive, farblingActive: $isFarblingActive, bgPlayActive: $isBgActive, isSiteException: $isException };",
                                 null
                             )
 
                             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                                if (isShieldActive && shieldScript.isNotBlank()) {
+                                    view?.evaluateJavascript(shieldScript, null)
+                                }
                                 if (isFarblingActive && farblingScript.isNotBlank()) {
                                     view?.evaluateJavascript(farblingScript, null)
                                 }
@@ -511,6 +857,9 @@ actual fun PeachWebView(
 
                             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                                 val currentHost = try { Uri.parse(pageUrl ?: "").host ?: "" } catch (e: Exception) { "" }
+                                if (isShieldActiveForHost(currentHost) && shieldScript.isNotBlank()) {
+                                    view?.evaluateJavascript(shieldScript, null)
+                                }
                                 if (isFarblingActiveForHost(currentHost) && farblingScript.isNotBlank()) {
                                     view?.evaluateJavascript(farblingScript, null)
                                 }
@@ -550,10 +899,12 @@ actual fun PeachWebView(
                         private fun handleUrlLoading(view: WebView?, reqUrl: String): Boolean {
                             if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
                                 var targetUrl = reqUrl
-                                if (isDeAmpEnabled) {
+                                val host = try { Uri.parse(reqUrl).host ?: "" } catch (e: Exception) { "" }
+                                val isException = isSiteException(host)
+                                if (isDeAmpEnabled && !isException) {
                                     targetUrl = UrlSanitizer.deAmp(targetUrl)
                                 }
-                                if (isTrackingProtectionEnabled) {
+                                if (isTrackingProtectionEnabled && !isException) {
                                     targetUrl = UrlSanitizer.stripTrackingParams(targetUrl)
                                 }
                                 if (targetUrl != reqUrl) {
@@ -710,6 +1061,11 @@ actual fun PeachWebView(
                             }
 
                             @android.webkit.JavascriptInterface
+                            fun isSiteException(host: String): Boolean {
+                                return nativeWebView.isSiteException(host)
+                            }
+
+                            @android.webkit.JavascriptInterface
                             fun isBackgroundPlayActive(): Boolean {
                                 return nativeWebView.isBackgroundPlayActive
                             }
@@ -775,13 +1131,19 @@ actual fun PeachWebView(
                     controller?.stopLoadingAction = { stopLoading() }
                     controller?.loadUrlAction = { newUrl ->
                         lastLoadedUrl = newUrl
+                        val targetHost = try { Uri.parse(newUrl).host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                        if (targetHost.isNotBlank()) {
+                            currentMainFrameHost = targetHost
+                            AdBlocker.currentMainFrameHost = targetHost
+                        }
                         loadUrl(newUrl)
                     }
 
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                         try {
-                            val shieldJs = ctx.assets.open("privacy_shield.bundle.js").bufferedReader().use { it.readText() }
-                            WebViewCompat.addDocumentStartJavaScript(this, shieldJs, setOf("*"))
+                            if (shieldScript.isNotBlank()) {
+                                WebViewCompat.addDocumentStartJavaScript(this, shieldScript, setOf("*"))
+                            }
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
@@ -810,12 +1172,20 @@ actual fun PeachWebView(
 
                     if (url.isNotBlank()) {
                         lastLoadedUrl = url
+                        val initialHost = try { Uri.parse(url).host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                        if (initialHost.isNotBlank()) {
+                            currentMainFrameHost = initialHost
+                            AdBlocker.currentMainFrameHost = initialHost
+                        }
                         loadUrl(url)
                     }
                 }
             }
         },
         update = { webView ->
+            webView.onImageLongPressHandler = { imgUrl ->
+                longPressedImageUrl = imgUrl
+            }
             webView.onPermissionRequestHandler = handlePermissionRequest
             webView.onPermissionRequestCanceledHandler = handlePermissionRequestCanceled
             webView.onFullscreenChanged = { isFullscreen ->
@@ -837,45 +1207,47 @@ actual fun PeachWebView(
                 controller?.resumeMedia()
             }
 
-            // Always sync live volatile settings onto PeachNativeWebView BEFORE checking reload trigger
+            AdBlocker.globalShieldEnabled = browserState.isAdBlockEnabled
+            AdBlocker.globalSiteExceptions = browserState.siteExceptions
+
             webView.isBackgroundPlayActive = browserState.isBackgroundPlayEnabled
             webView.isShieldEnabled = browserState.isAdBlockEnabled
             webView.isFarblingEnabled = browserState.isFarblingEnabled
             webView.isTrackingProtectionEnabled = browserState.isTrackingProtectionEnabled
             webView.isDeAmpEnabled = browserState.isDeAmpEnabled
             webView.siteShieldOverrides = browserState.siteShieldOverrides
+            webView.siteExceptions = browserState.siteExceptions
 
             if (webView.isBackgroundPlayActive) {
                 webView.resumeTimers()
             }
 
-            // Per-site shield settings & JavaScript blocking
             val currentHost = try {
                 Uri.parse(webView.url ?: "").host ?: ""
             } catch (e: Exception) { "" }
+            val isException = webView.isSiteException(currentHost)
             val siteConfig = browserState.siteShieldOverrides.entries.find {
                 currentHost == it.key || currentHost.endsWith(".${it.key}")
             }?.value
-            val shouldBlockScripts = (siteConfig?.shieldsUp == true && siteConfig.blockScripts)
+            val shouldBlockScripts = !isException && (siteConfig?.shieldsUp == true && siteConfig.blockScripts)
             webView.settings.javaScriptEnabled = !shouldBlockScripts
             webView.settings.domStorageEnabled = true
             webView.settings.databaseEnabled = true
 
-            // Trap 1 Fix: Compare against webView.appliedReloadTrigger which survives navigation
             if (webView.appliedReloadTrigger != browserState.shouldReloadTrigger) {
                 webView.appliedReloadTrigger = browserState.shouldReloadTrigger
                 val isShieldActive = webView.isShieldActiveForHost(currentHost)
                 val isFarblingActive = webView.isFarblingActiveForHost(currentHost)
                 val isBgActive = webView.isBackgroundPlayActive
                 webView.evaluateJavascript(
-                    "window.__PEACH_CONFIG__ = { shieldActive: $isShieldActive, farblingActive: $isFarblingActive, bgPlayActive: $isBgActive };",
+                    "window.__PEACH_CONFIG__ = { shieldActive: $isShieldActive, farblingActive: $isFarblingActive, bgPlayActive: $isBgActive, isSiteException: $isException };",
                     null
                 )
                 val targetReloadUrl = browserState.currentUrl
-                if (targetReloadUrl.isNotBlank() && targetReloadUrl != webView.url) {
-                    webView.loadUrl(targetReloadUrl)
-                } else {
+                if (!webView.url.isNullOrBlank()) {
                     webView.reload()
+                } else if (targetReloadUrl.isNotBlank()) {
+                    webView.loadUrl(targetReloadUrl)
                 }
             }
 
@@ -894,10 +1266,120 @@ actual fun PeachWebView(
             controller?.stopLoadingAction = { webView.stopLoading() }
             controller?.loadUrlAction = { newUrl ->
                 lastLoadedUrl = newUrl
+                val targetHost = try { Uri.parse(newUrl).host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                if (targetHost.isNotBlank()) {
+                    webView.currentMainFrameHost = targetHost
+                    AdBlocker.currentMainFrameHost = targetHost
+                }
                 webView.loadUrl(newUrl)
             }
         }
     )
+
+    val activeImageUrl = longPressedImageUrl
+    if (!activeImageUrl.isNullOrBlank()) {
+        @OptIn(ExperimentalMaterial3Api::class)
+        ModalBottomSheet(
+            onDismissRequest = { longPressedImageUrl = null },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "Image Options",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = Color(0xFF1E1E2E)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = activeImageUrl,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
+                    color = Color(0xFF757575),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = Color(0xFFF0F0F0))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val ua = AndroidTabWebViewPool.get(tabId)?.settings?.userAgentString
+                            enqueuePeachDownload(context, activeImageUrl, ua, null, "image/*", browserViewModel)
+                            longPressedImageUrl = null
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("📥", fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(
+                        text = "Download image",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                        color = Color(0xFF1E1E2E)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            browserViewModel.processIntent(BrowserIntent.AddTab(activeImageUrl))
+                            longPressedImageUrl = null
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🌐", fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(
+                        text = "Open image in new tab",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                        color = Color(0xFF1E1E2E)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            try {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("Image URL", activeImageUrl))
+                                Toast.makeText(context, "Image link copied", Toast.LENGTH_SHORT).show()
+                            } catch (_: Exception) {}
+                            longPressedImageUrl = null
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("📋", fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(
+                        text = "Copy image link",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                        color = Color(0xFF1E1E2E)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
 
     DisposableEffect(lifecycleOwner, browserState.isClearSessionOnExitEnabled, browserState.isPrivateMode) {
         val observer = LifecycleEventObserver { _, event ->
