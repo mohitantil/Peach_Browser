@@ -1,6 +1,11 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Desktop (JVM), Server.
+# 🍑 Peach Browser — Kotlin Multiplatform
 
-* [/app/iosApp](./app/iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
+> 📲 **Download Pre-built Android APK**: [**Latest Release (v1.5)**](https://github.com/mohitantil3399/Peach_Browser/releases/latest)
+
+This is a Kotlin Multiplatform project targeting Android, iOS, Desktop (JVM), and Server.
+
+* [/app/androidApp](./app/androidApp) contains the native Android application (built with Compose Multiplatform).
+* [/app/iosApp](./app/iosApp/iosApp) contains the iOS application. Even if you’re sharing your UI with Compose Multiplatform,
   you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
 
 * [/app/shared](./app/shared/src) is for code that will be shared across your Compose Multiplatform applications.
