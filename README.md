@@ -81,8 +81,8 @@ Peach Browser employs a **dual-layer defense system**:
 
 ### Step 1: Clone the Repository
 ```powershell
-git clone https://github.com/mohitantil3399/Pikachu_Browser.git
-cd Pikachu_Browser
+git clone https://github.com/mohitantil3399/Peach_Browser.git
+cd Peach_Browser
 ```
 
 ---
@@ -249,7 +249,7 @@ chroma_db_cache/
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/mohitantil3399/Pikachu_Browser/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/mohitantil3399/Peach_Browser/issues).
 
 ---
 
