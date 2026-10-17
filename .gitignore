@@ -80,3 +80,6 @@ refactor_tools/
 Peach-Python/tools/
 repomix-output.xml
 argon-prompt.md
+
+# Release binaries (upload to GitHub Releases)
+releases/*.apk
