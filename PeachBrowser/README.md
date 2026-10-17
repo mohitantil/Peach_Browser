@@ -1,6 +1,6 @@
 # 🍑 Peach Browser — Kotlin Multiplatform
 
-> 📲 **Download Pre-built Android APK**: [**Latest Release (v1.5)**](https://github.com/mohitantil3399/Peach_Browser/releases/latest)
+> 📲 **Download Pre-built Android APK**: [**Latest Release (v1.5)**](https://github.com/mohitantil/Peach_Browser/releases/latest)
 
 This is a Kotlin Multiplatform project targeting Android, iOS, Desktop (JVM), and Server.
 

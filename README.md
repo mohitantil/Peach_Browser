@@ -7,14 +7,14 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6%20%2F%20QtWebEngine-green.svg)](https://wiki.qt.io/Qt_for_Python)
 [![TypeScript](https://img.shields.io/badge/TypeScript-ES2022%20Shield-3178c6.svg)](https://www.typescriptlang.org/)
-[![Android Release](https://img.shields.io/badge/Android%20APK-Download%20Latest-brightgreen?logo=android&style=for-the-badge)](https://github.com/mohitantil3399/Peach_Browser/releases/latest)
+[![Android Release](https://img.shields.io/badge/Android%20APK-Download%20Latest-brightgreen?logo=android&style=for-the-badge)](https://github.com/mohitantil/Peach_Browser/releases/latest)
 [![Kotlin Multiplatform](https://img.shields.io/badge/Kotlin-Multiplatform%202.4-7F52FF?logo=kotlin&style=for-the-badge)](https://kotlinlang.org/docs/multiplatform.html)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg?style=for-the-badge)](LICENSE)
 
 > ### 📱 **Download Peach Browser for Android**
-> **Latest Version**: [**v1.5 Release APK**](https://github.com/mohitantil3399/Peach_Browser/releases/latest)
+> **Latest Version**: [**v1.5 Release APK**](https://github.com/mohitantil/Peach_Browser/releases/latest)
 >
-> 🚀 **[📥 Click here to Download `androidApp-debug.apk`](https://github.com/mohitantil3399/Peach_Browser/releases/latest)**
+> 🚀 **[📥 Click here to Download `androidApp-debug.apk`](https://github.com/mohitantil/Peach_Browser/releases/latest)**
 >
 > Experience Brave-grade ad blocking, background YouTube streaming, sleep timer, real-time synced downloads, and ephemeral session privacy directly on your Android phone!
 
@@ -87,7 +87,7 @@ Peach Browser employs a **dual-layer defense system**:
 
 ### 📱 Android Installation (Fastest — Pre-built APK)
 
-1. Download the latest **[`androidApp-debug.apk`](https://github.com/mohitantil3399/Peach_Browser/releases/latest)** from [GitHub Releases](https://github.com/mohitantil3399/Peach_Browser/releases/latest).
+1. Download the latest **[`androidApp-debug.apk`](https://github.com/mohitantil/Peach_Browser/releases/latest)** from [GitHub Releases](https://github.com/mohitantil/Peach_Browser/releases/latest).
 2. On your Android device, tap the downloaded APK to install (enable *"Install unknown apps"* if prompted).
 3. Open **Peach Browser** — enjoy ad-free browsing, YouTube background streaming, and real-time downloads immediately!
 
@@ -105,7 +105,7 @@ Peach Browser employs a **dual-layer defense system**:
 
 ### Step 1: Clone the Repository
 ```powershell
-git clone https://github.com/mohitantil3399/Peach_Browser.git
+git clone https://github.com/mohitantil/Peach_Browser.git
 cd Peach_Browser
 ```
 
@@ -273,7 +273,7 @@ chroma_db_cache/
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/mohitantil3399/Peach_Browser/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/mohitantil/Peach_Browser/issues).
 
 ---
 

@@ -7,7 +7,7 @@ project:
   name: "Peach Browser"
   title: "Peach AI - Agentic Web & Research Browser"
   description: "Agentic research browser with TypeScript privacy shield, SearXNG local metasearch, and ChromaDB active document RAG."
-  repository: "https://github.com/mohitantil3399/Peach_Browser"
+  repository: "https://github.com/mohitantil/Peach_Browser"
   license: "GPL-3.0"
   entrypoint: "app.py"
 
