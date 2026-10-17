@@ -1041,13 +1041,13 @@ actual fun PeachWebView(
                             @android.webkit.JavascriptInterface
                             fun onMediaStateChanged(isPlaying: Boolean) {
                                 post {
-                                    if (isPlaying) {
-                                        audioFocusManager.requestAudioFocus()
-                                    } else {
-                                        audioFocusManager.abandonAudioFocus()
-                                    }
                                     browserViewModel.processIntent(BrowserIntent.SetAudioPlaying(isPlaying))
                                 }
+                            }
+
+                            @android.webkit.JavascriptInterface
+                            fun isAppBackgrounded(): Boolean {
+                                return com.example.peachbrowser.webview.AppBackgroundTracker.isBackgrounded
                             }
 
                             @android.webkit.JavascriptInterface

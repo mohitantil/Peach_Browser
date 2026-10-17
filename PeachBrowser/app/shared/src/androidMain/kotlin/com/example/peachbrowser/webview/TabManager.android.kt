@@ -4,6 +4,17 @@ import android.content.Context
 import android.view.ViewGroup
 import java.util.concurrent.ConcurrentHashMap
 
+object AppBackgroundTracker {
+    @Volatile
+    var isBackgrounded: Boolean = false
+        private set
+
+    fun updateBackgroundState(flag: Boolean) {
+        isBackgrounded = flag
+        AndroidTabWebViewPool.setAppBackgrounded(flag)
+    }
+}
+
 object AndroidTabWebViewPool {
     private val pool = ConcurrentHashMap<String, PeachNativeWebView>()
 
@@ -54,70 +65,108 @@ object AndroidTabWebViewPool {
         }
     }
 
+    fun setAppBackgrounded(flag: Boolean) {
+        pool.values.forEach { webView ->
+            try {
+                webView.post {
+                    webView.evaluateJavascript(
+                        "window.__PEACH_APP_BACKGROUNDED__ = $flag;",
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun pauseAllMedia() {
         pool.values.forEach { webView ->
-            webView.post {
-                webView.evaluateJavascript(
-                    """
-                    (function() {
-                        window.__PEACH_EXTERNAL_PAUSED__ = true;
-                        if (typeof window.__PEACH_PAUSE_ALL_MEDIA__ === 'function') {
-                            window.__PEACH_PAUSE_ALL_MEDIA__();
-                        } else {
-                            document.querySelectorAll('audio, video').forEach(function(el) {
-                                try {
-                                    if (!el.paused) el.__peach_paused_by_focus = true;
-                                    el.__peach_sleep_timer_paused = true;
-                                    el.__peach_user_paused = true;
-                                    HTMLMediaElement.prototype.pause.call(el);
-                                } catch(e) {}
-                            });
-                        }
-                    })();
-                    """.trimIndent(),
-                    null
-                )
+            try {
+                webView.post {
+                    webView.evaluateJavascript(
+                        """
+                        (function() {
+                            window.__PEACH_EXTERNAL_PAUSED__ = true;
+                            if (typeof window.__PEACH_PAUSE_ALL_MEDIA__ === 'function') {
+                                window.__PEACH_PAUSE_ALL_MEDIA__();
+                            } else {
+                                document.querySelectorAll('audio, video').forEach(function(el) {
+                                    try {
+                                        el.__peach_sleep_timer_paused = true;
+                                        el.pause();
+                                    } catch(e) {}
+                                });
+                            }
+                        })();
+                        """.trimIndent(),
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
 
     fun resumeActiveMedia() {
         pool.values.forEach { webView ->
-            webView.post {
-                webView.evaluateJavascript(
-                    """
-                    (function() {
-                        window.__PEACH_EXTERNAL_PAUSED__ = false;
-                        if (typeof window.__PEACH_RESUME_ALL_MEDIA__ === 'function') {
-                            window.__PEACH_RESUME_ALL_MEDIA__();
-                        } else {
-                            document.querySelectorAll('audio, video').forEach(function(el) {
-                                try {
-                                    if (el.__peach_paused_by_focus) {
-                                        el.__peach_paused_by_focus = false;
+            try {
+                webView.post {
+                    webView.evaluateJavascript(
+                        """
+                        (function() {
+                            window.__PEACH_EXTERNAL_PAUSED__ = false;
+                            if (typeof window.__PEACH_RESUME_ALL_MEDIA__ === 'function') {
+                                window.__PEACH_RESUME_ALL_MEDIA__();
+                            } else {
+                                document.querySelectorAll('audio, video').forEach(function(el) {
+                                    try {
                                         el.__peach_sleep_timer_paused = false;
-                                        el.__peach_user_paused = false;
-                                        el.__peach_was_playing = true;
-                                        el.play();
-                                    }
-                                } catch(e) {}
-                            });
-                        }
-                    })();
-                    """.trimIndent(),
-                    null
-                )
+                                        if (el.paused && !el.ended && el.currentTime > 0) {
+                                            var p = el.play();
+                                            if (p && typeof p.catch === 'function') p.catch(function(){});
+                                        }
+                                    } catch(e) {}
+                                });
+                            }
+                        })();
+                        """.trimIndent(),
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun duckAllMedia() {
+        pool.values.forEach { webView ->
+            try {
+                webView.post {
+                    webView.evaluateJavascript(
+                        "if (typeof window.__PEACH_DUCK_MEDIA__ === 'function') window.__PEACH_DUCK_MEDIA__(true);",
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
 
     fun unduckAllMedia() {
         pool.values.forEach { webView ->
-            webView.post {
-                webView.evaluateJavascript(
-                    "if (typeof window.__PEACH_DUCK_MEDIA__ === 'function') window.__PEACH_DUCK_MEDIA__(false);",
-                    null
-                )
+            try {
+                webView.post {
+                    webView.evaluateJavascript(
+                        "if (typeof window.__PEACH_DUCK_MEDIA__ === 'function') window.__PEACH_DUCK_MEDIA__(false);",
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }

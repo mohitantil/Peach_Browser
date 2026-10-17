@@ -1,28 +1,58 @@
 /**
- * Peach AI Browser — True Background Playback Engine
- * Scoped strictly to streaming media domains so non-media SPAs are never affected,
- * while exposing global Pause/Resume/Duck bridges for Audio Focus and Sleep Timer.
+ * Peach AI Browser — Background Playback & Autoplay Engine
+ *
+ * Designed for 1-tap playback and continuous autoplay in foreground and background.
+ *
+ * Invariants:
+ * 1. ZERO prototype patching of HTMLMediaElement.prototype.pause or .play.
+ *    The player state machine is 100% native in the foreground, enabling 1-tap play
+ *    and seamless cueing of next tracks.
+ * 2. Document.prototype.hasFocus returns true so YouTube/YT Music's autoplay
+ *    and watchdog logic never halts playback when minimized.
+ * 3. Page visibility is spoofed (hidden = false, visibilityState = 'visible')
+ *    and visibilitychange/blur events are blocked.
+ * 4. Background re-arm is active ONLY when isAppBackgrounded() is true and
+ *    the media has not ended (allowing autoplay-next to advance uninterrupted).
  */
 (function initPeachBackgroundPlayback() {
     'use strict';
 
-    const nativeMediaPause = HTMLMediaElement.prototype.pause;
+    if (typeof window.__PEACH_EXTERNAL_PAUSED__ !== 'boolean') {
+        window.__PEACH_EXTERNAL_PAUSED__ = false;
+    }
 
-    window.__PEACH_EXTERNAL_PAUSED__ = false;
+    function bridgeCall(name) {
+        try {
+            if (window.PeachNativeBridge && typeof window.PeachNativeBridge[name] === 'function') {
+                return !!window.PeachNativeBridge[name]();
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function bgPlayEnabled() {
+        if (bridgeCall('isBackgroundPlayActive')) return true;
+        try {
+            if (window.__PEACH_CONFIG__ && typeof window.__PEACH_CONFIG__.bgPlayActive === 'boolean') {
+                return !!window.__PEACH_CONFIG__.bgPlayActive;
+            }
+        } catch (e) {}
+        return true;
+    }
+
+    function isAppBackgrounded() {
+        if (bridgeCall('isAppBackgrounded')) return true;
+        return window.__PEACH_APP_BACKGROUNDED__ === true;
+    }
 
     window.__PEACH_PAUSE_ALL_MEDIA__ = function() {
         try {
             window.__PEACH_EXTERNAL_PAUSED__ = true;
             const mediaElements = document.querySelectorAll('video, audio');
             mediaElements.forEach(media => {
-                if (!media.paused) {
-                    media.__peach_paused_by_focus = true;
-                }
                 media.__peach_sleep_timer_paused = true;
-                media.__peach_user_paused = true;
-                media.__peach_was_playing = false;
                 try {
-                    nativeMediaPause.apply(media);
+                    media.pause();
                 } catch (e) {}
             });
             if (window.PeachNativeBridge && typeof window.PeachNativeBridge.onMediaStateChanged === 'function') {
@@ -36,16 +66,12 @@
             window.__PEACH_EXTERNAL_PAUSED__ = false;
             const mediaElements = document.querySelectorAll('video, audio');
             mediaElements.forEach(media => {
-                const shouldResume = media.__peach_paused_by_focus === true;
-                media.__peach_paused_by_focus = false;
                 media.__peach_sleep_timer_paused = false;
-                media.__peach_user_paused = false;
-                media.__peach_was_playing = true;
-                if (shouldResume) {
+                if (media.paused && !media.ended && media.currentTime > 0) {
                     try {
-                        const playPromise = media.play();
-                        if (playPromise !== undefined) {
-                            playPromise.catch(() => {});
+                        const p = media.play();
+                        if (p !== undefined && p && typeof p.catch === 'function') {
+                            p.catch(() => {});
                         }
                     } catch (e) {}
                 }
@@ -76,27 +102,20 @@
 
     const currentHost = (location.hostname || '').toLowerCase();
     const streamingDomains = [
-        'youtube.com', 'music.youtube.com', 'youtu.be', 'vimeo.com', 'dailymotion.com',
-        'twitch.tv', 'soundcloud.com', 'spotify.com', 'music.apple.com',
-        'gaana.com', 'jiosaavn.com', 'wynk.in', 'tidal.com',
+        'youtube.com', 'music.youtube.com', 'youtu.be', 'youtube-nocookie.com',
+        'vimeo.com', 'dailymotion.com', 'twitch.tv', 'soundcloud.com', 'spotify.com',
+        'music.apple.com', 'gaana.com', 'jiosaavn.com', 'wynk.in', 'tidal.com',
         'deezer.com', 'pandora.com', 'audiomack.com', 'bandcamp.com'
     ];
+
     const isStreamingDomain = streamingDomains.some(d => currentHost === d || currentHost.endsWith('.' + d));
     if (!isStreamingDomain) {
         return;
     }
 
-    try {
-        if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isBackgroundPlayActive === 'function') {
-            if (!window.PeachNativeBridge.isBackgroundPlayActive()) {
-                return;
-            }
-        } else if (window.__PEACH_CONFIG__ && typeof window.__PEACH_CONFIG__.bgPlayActive === 'boolean') {
-            if (!window.__PEACH_CONFIG__.bgPlayActive) {
-                return;
-            }
-        }
-    } catch (e) {}
+    if (!bgPlayEnabled()) {
+        return;
+    }
 
     window.__PEACH_BG_PLAYBACK_ACTIVE__ = true;
 
@@ -116,6 +135,16 @@
         defineVisProperty(document, 'visibilityState', 'visible');
         defineVisProperty(document, 'webkitHidden', false);
         defineVisProperty(document, 'webkitVisibilityState', 'visible');
+
+        // Always report focused so YouTube, YT Music, and HTML5 players
+        // know the tab is active and continue autoplay-next seamlessly.
+        try {
+            Object.defineProperty(Document.prototype, 'hasFocus', {
+                value: function hasFocus() { return true; },
+                writable: true,
+                configurable: true
+            });
+        } catch (e) {}
 
         try {
             Object.defineProperty(document, 'onvisibilitychange', {
@@ -146,60 +175,49 @@
         };
 
         blockedEvents.forEach(evtName => {
-            window.addEventListener(evtName, (e) => {
-                e.stopImmediatePropagation();
-            }, true);
-            document.addEventListener(evtName, (e) => {
-                e.stopImmediatePropagation();
-            }, true);
+            const killer = (e) => { e.stopImmediatePropagation(); };
+            originalAddEventListener.call(window, evtName, killer, true);
+            originalAddEventListener.call(document, evtName, killer, true);
         });
 
-        let isUserInteracting = false;
-        let interactionTimer = null;
-        const setInteracting = () => {
-            isUserInteracting = true;
-            window.__PEACH_EXTERNAL_PAUSED__ = false;
-            if (interactionTimer) clearTimeout(interactionTimer);
-            interactionTimer = setTimeout(() => {
-                isUserInteracting = false;
-            }, 800);
-        };
-
-        ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(evt => {
-            window.addEventListener(evt, setInteracting, { capture: true, passive: true });
-        });
-
-        HTMLMediaElement.prototype.pause = function() {
-            if (window.__PEACH_EXTERNAL_PAUSED__ || this.__peach_sleep_timer_paused || this.__peach_paused_by_focus) {
-                return nativeMediaPause.apply(this, arguments);
-            }
-            if (isUserInteracting) {
-                this.__peach_user_paused = true;
-                return nativeMediaPause.apply(this, arguments);
-            }
-            let bgStillEnabled = true;
+        // Background supervisor: active ONLY while backgrounded.
+        // In the foreground, there is zero interference with pause events.
+        // If a track finishes (ended === true), supervisor does not re-play track 1,
+        // allowing YouTube's native autoplay queue to load and play track 2.
+        document.addEventListener('pause', function(e) {
             try {
-                if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isBackgroundPlayActive === 'function') {
-                    bgStillEnabled = window.PeachNativeBridge.isBackgroundPlayActive();
-                }
-            } catch (e) {}
+                const el = e && e.target;
+                if (!el || (el.tagName !== 'VIDEO' && el.tagName !== 'AUDIO')) return;
 
-            if (bgStillEnabled && (this.tagName === 'VIDEO' || this.tagName === 'AUDIO') &&
-                (currentHost.includes('youtube.com') || currentHost.includes('vimeo.com') || currentHost.includes('youtu.be'))
-            ) {
-                this.__peach_user_paused = false;
-                return;
-            }
-            return nativeMediaPause.apply(this, arguments);
-        };
+                // Foreground: 100% native behavior.
+                if (!isAppBackgrounded()) return;
+                if (window.__PEACH_EXTERNAL_PAUSED__ || el.__peach_sleep_timer_paused) return;
+                if (!bgPlayEnabled()) return;
 
-        // Maintain window._lact every 30s to prevent YouTube's inactivity watchdog from pausing audio
+                // If track ended, do NOT re-arm old track; let autoplay advance to next track!
+                if (el.ended) return;
+
+                setTimeout(() => {
+                    try {
+                        if (!isAppBackgrounded()) return;
+                        if (window.__PEACH_EXTERNAL_PAUSED__ || el.__peach_sleep_timer_paused) return;
+                        if (!bgPlayEnabled()) return;
+                        if (!el.paused || el.ended) return;
+
+                        const p = el.play();
+                        if (p !== undefined && p && typeof p.catch === 'function') {
+                            p.catch(() => {});
+                        }
+                    } catch (err) {}
+                }, 300);
+            } catch (err) {}
+        }, true);
+
+        // Keep YouTube inactivity watchdog satisfied
         window._lact = Date.now();
         setInterval(() => {
-            try {
-                window._lact = Date.now();
-            } catch (e) {}
-        }, 30000);
+            try { window._lact = Date.now(); } catch (e) {}
+        }, 20000);
 
     } catch (e) {}
 })();

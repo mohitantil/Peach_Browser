@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        com.example.peachbrowser.webview.AppBackgroundTracker.updateBackgroundState(true)
         super.onPause()
         ensureBackgroundMediaServiceState()
     }
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         try {
+            com.example.peachbrowser.webview.AppBackgroundTracker.updateBackgroundState(false)
             PeachMediaService.stop(this)
             val activeTabId = browserViewModel.state.value.activeTabId
             AndroidTabWebViewPool.get(activeTabId)?.let { webView ->
