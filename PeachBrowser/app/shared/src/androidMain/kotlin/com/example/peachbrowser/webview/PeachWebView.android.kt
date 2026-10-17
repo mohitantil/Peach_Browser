@@ -701,7 +701,8 @@ actual fun PeachWebView(
                         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                         setSupportMultipleWindows(false)
                         javaScriptCanOpenWindowsAutomatically = true
-                        allowFileAccess = false
+                        allowFileAccess = true
+                        allowContentAccess = true
                         mediaPlaybackRequiresUserGesture = false
                         useWideViewPort = true
                         loadWithOverviewMode = false
@@ -911,6 +912,11 @@ actual fun PeachWebView(
                                     view?.loadUrl(targetUrl)
                                     return true
                                 }
+                                return false
+                            } else if (reqUrl.startsWith("file://", ignoreCase = true) ||
+                                reqUrl.startsWith("content://", ignoreCase = true) ||
+                                reqUrl.startsWith("about:", ignoreCase = true)
+                            ) {
                                 return false
                             }
                             try {

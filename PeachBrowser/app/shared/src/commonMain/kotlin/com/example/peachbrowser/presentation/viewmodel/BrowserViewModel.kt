@@ -14,6 +14,7 @@ import com.example.peachbrowser.presentation.mvi.SiteShieldConfig
 import com.example.peachbrowser.presentation.mvi.SleepTimerAction
 import com.example.peachbrowser.presentation.mvi.SleepTimerState
 import com.example.peachbrowser.presentation.mvi.THIRTY_DAYS_MILLIS
+import com.example.peachbrowser.util.ExternalLinkRouter
 import com.example.peachbrowser.util.SearchEngine
 import com.example.peachbrowser.util.UrlSanitizer
 import com.example.peachbrowser.util.clearBrowserSession
@@ -47,6 +48,7 @@ class BrowserViewModel(
     var onPausePlaybackAction: (() -> Unit)? = null
 
     init {
+        ExternalLinkRouter.activeViewModel = this
         loadPersistedSettings()
         startRealTimeDownloadsSync()
     }
@@ -219,16 +221,23 @@ class BrowserViewModel(
             is BrowserIntent.LoadUrl -> {
                 var url = intent.url.trim()
                 if (url.isNotBlank()) {
-                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    val isHttp = url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
+                    val isLocalOrScheme = url.startsWith("file://", ignoreCase = true) ||
+                            url.startsWith("content://", ignoreCase = true) ||
+                            url.startsWith("about:", ignoreCase = true)
+
+                    if (!isHttp && !isLocalOrScheme) {
                         url = "https://$url"
                     }
-                    val host = normalizeDomain(url)
-                    val isException = _state.value.siteExceptions.any { host == it || host.endsWith(".$it") }
-                    if (_state.value.isDeAmpEnabled && !isException) {
-                        url = UrlSanitizer.deAmp(url)
-                    }
-                    if (_state.value.isTrackingProtectionEnabled && !isException) {
-                        url = UrlSanitizer.stripTrackingParams(url)
+                    if (isHttp || (!isLocalOrScheme && !url.startsWith("about:"))) {
+                        val host = normalizeDomain(url)
+                        val isException = _state.value.siteExceptions.any { host == it || host.endsWith(".$it") }
+                        if (_state.value.isDeAmpEnabled && !isException) {
+                            url = UrlSanitizer.deAmp(url)
+                        }
+                        if (_state.value.isTrackingProtectionEnabled && !isException) {
+                            url = UrlSanitizer.stripTrackingParams(url)
+                        }
                     }
                     updateCurrentTab { tab ->
                         tab.copy(

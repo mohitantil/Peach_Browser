@@ -6,8 +6,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import android.content.Intent
 import com.example.peachbrowser.presentation.viewmodel.BrowserViewModel
 import com.example.peachbrowser.service.PeachMediaService
+import com.example.peachbrowser.util.ExternalLinkRouter
 import com.example.peachbrowser.util.MediaDetector
 import com.example.peachbrowser.util.PeachAudioFocusManager
 import com.example.peachbrowser.webview.AndroidTabWebViewPool
@@ -28,9 +30,51 @@ class MainActivity : ComponentActivity() {
             browserViewModel.resetToCleanSession()
         }
 
+        handleIncomingIntent(intent)
+
         setContent {
             App()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(incomingIntent: Intent?) {
+        if (incomingIntent == null) return
+        val action = incomingIntent.action ?: return
+        val type = incomingIntent.type
+
+        when (action) {
+            Intent.ACTION_VIEW -> {
+                val dataUri = incomingIntent.data
+                if (dataUri != null) {
+                    ExternalLinkRouter.handleIncomingUrl(
+                        rawUri = dataUri.toString(),
+                        viewModel = browserViewModel
+                    )
+                }
+            }
+            Intent.ACTION_SEND -> {
+                if (type == "text/plain") {
+                    val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT)
+                        ?: incomingIntent.getStringExtra(Intent.EXTRA_STREAM)
+                    if (!sharedText.isNullOrBlank()) {
+                        ExternalLinkRouter.handleSharedText(
+                            sharedText = sharedText,
+                            viewModel = browserViewModel
+                        )
+                    }
+                }
+            }
+        }
+        // Clear processed intent data to prevent duplicate triggering on activity restart
+        incomingIntent.data = null
+        incomingIntent.removeExtra(Intent.EXTRA_TEXT)
+        incomingIntent.removeExtra(Intent.EXTRA_STREAM)
     }
 
     override fun onPause() {

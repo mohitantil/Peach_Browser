@@ -245,4 +245,19 @@
     - Base64 & Data URI Download Support: `enqueuePeachDownload` extracts inline base64 data payloads, writes decoded bytes to public Downloads, notifies `MediaScannerConnection`, and registers synthetic entries in `BrowserViewModel`.
     - Split Downloads Dashboard: Overhauled `DownloadsScreen.kt` with pill navigation ("Split View", "Current Session", "Past 30 Days"), real-time storage status indicators, time elapsed / 30-day auto-clear countdown tickers, and direct file deletion actions.
     - Verified compilation via `./gradlew :app:androidApp:assembleDebug` (`BUILD SUCCESSFUL in 15s`).
+- **2026-10-17**:
+  - External Link, Document & Share Intent Engine (Multiplatform Android & iOS):
+    - Implemented `ExternalLinkRouter.kt` in KMP shared core (`app/shared/util`) with regex URL extraction from shared plain text, search fallback, and smart non-destructive tab dispatch (`LoadUrl` if current tab is blank, otherwise `AddTab`).
+    - Configured `android:launchMode="singleTask"` on `MainActivity` in `AndroidManifest.xml` to prevent duplicate activity creation and tab destruction when opening external links.
+    - Added Intent Filters in `AndroidManifest.xml`:
+      - `ACTION_VIEW` for HTTP/HTTPS web URLs with `DEFAULT` and `BROWSABLE` categories (enables Peach Browser as default system browser).
+      - `ACTION_SEND` with MIME type `text/plain` for receiving shared links and text from other apps.
+      - `ACTION_VIEW` for local document files and content providers (`text/html`, `text/plain`, `application/xhtml+xml`, `application/pdf`, and path patterns `.html`, `.htm`, `.txt`, `.pdf`).
+    - Handled cold and warm intent routing in `MainActivity.kt` (`onCreate` and `onNewIntent`) with rotation-safe intent clearing (`intent.data = null`).
+    - Configured iOS `Info.plist` with `CFBundleURLTypes` (`peach`, `peachbrowser`, `http`, `https`), `CFBundleDocumentTypes` (`public.html`, `public.plain-text`, `com.adobe.pdf`), and `LSSupportsOpeningDocumentsInPlace: true`.
+    - Integrated SwiftUI `.onOpenURL` in `iOSApp.swift` with security-scoped resource access for Files app, Mail, and AirDrop.
+    - Updated `PeachWebView.android.kt` with `allowFileAccess = true` and `allowContentAccess = true`, preventing external intent loops on local/scheme URIs (`file://`, `content://`, `about:`).
+    - Protected `BrowserViewModel.kt` `LoadUrl` from prepending `https://` or corrupting local `file://`, `content://`, and `about:` URIs.
+    - Added subscreen navigation auto-return via `DisposableEffect` in `App.kt` so external links smoothly bring the user back to the web view.
+    - Verified complete Android debug compilation: `./gradlew :app:androidApp:assembleDebug` (`BUILD SUCCESSFUL in 1m 18s`).
 

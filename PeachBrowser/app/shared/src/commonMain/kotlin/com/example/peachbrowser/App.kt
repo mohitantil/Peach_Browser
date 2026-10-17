@@ -138,6 +138,21 @@ fun App() {
             }
         }
 
+        // Wire external link navigation to return to BrowserHomeRoute if a subscreen is open
+        DisposableEffect(navController, isSubScreenOpen) {
+            com.example.peachbrowser.util.ExternalLinkRouter.onNavigateToBrowserHome = {
+                if (isSubScreenOpen) {
+                    navController.navigate(BrowserHomeRoute) {
+                        popUpTo(BrowserHomeRoute) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                }
+            }
+            onDispose {
+                com.example.peachbrowser.util.ExternalLinkRouter.onNavigateToBrowserHome = null
+            }
+        }
+
         // Sync address bar text with active page without clobbering active user typing
         LaunchedEffect(browserState.activeTabId) {
             addressText = if (isLandingPage) "" else (webViewController.currentUrl.ifBlank { browserState.currentUrl })
