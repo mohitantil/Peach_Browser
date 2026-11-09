@@ -143,8 +143,14 @@ class BrowserViewModel(
         downloadsSyncJob?.cancel()
         downloadsSyncJob = viewModelScope.launch {
             while (true) {
-                delay(1000L)
-                performDownloadsStorageSync()
+                val hasActiveDownloads = _state.value.sessionDownloads.any { !it.isCompleted && !it.isFailed } ||
+                        _state.value.downloads.any { !it.isCompleted && !it.isFailed }
+                if (hasActiveDownloads) {
+                    performDownloadsStorageSync()
+                    delay(1000L)
+                } else {
+                    delay(5000L)
+                }
             }
         }
     }
@@ -614,6 +620,17 @@ class BrowserViewModel(
                 if (_state.value.isAudioPlaying != intent.isPlaying) {
                     _state.value = _state.value.copy(isAudioPlaying = intent.isPlaying)
                 }
+            }
+            is BrowserIntent.UpdateMediaMetadata -> {
+                _state.value = _state.value.copy(
+                    mediaMetadata = com.example.peachbrowser.presentation.mvi.MediaMetadataState(
+                        title = intent.title,
+                        artist = intent.artist,
+                        artworkUrl = intent.artworkUrl,
+                        isPlaying = intent.isPlaying
+                    ),
+                    isAudioPlaying = intent.isPlaying
+                )
             }
             is BrowserIntent.StartSleepTimer -> {
                 startSleepTimer(intent.durationMinutes, intent.action)

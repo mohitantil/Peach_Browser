@@ -42,9 +42,13 @@ fun DownloadsScreen(
     LaunchedEffect(Unit) {
         onIntent(BrowserIntent.SyncDownloadsWithStorage)
         while (true) {
-            delay(1000L)
+            val hasActive = sessionDownloads.any { !it.isCompleted && !it.isFailed } ||
+                    allTimeDownloads.any { !it.isCompleted && !it.isFailed }
+            delay(if (hasActive) 1000L else 3000L)
             nowMillis = currentTimeMillis()
-            onIntent(BrowserIntent.SyncDownloadsWithStorage)
+            if (hasActive || sessionDownloads.isNotEmpty() || allTimeDownloads.isNotEmpty()) {
+                onIntent(BrowserIntent.SyncDownloadsWithStorage)
+            }
         }
     }
 

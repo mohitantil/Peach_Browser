@@ -1,6 +1,7 @@
 package com.example.peachbrowser.webview
 
 import android.content.Context
+import android.content.MutableContextWrapper
 import android.view.ViewGroup
 import java.util.concurrent.ConcurrentHashMap
 
@@ -25,6 +26,7 @@ object AndroidTabWebViewPool {
     ): PeachNativeWebView {
         val existing = pool[tabId]
         if (existing != null) {
+            (existing.context as? MutableContextWrapper)?.baseContext = context
             (existing.parent as? ViewGroup)?.removeView(existing)
             existing.layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -32,7 +34,8 @@ object AndroidTabWebViewPool {
             )
             return existing
         }
-        val created = factory(context).apply {
+        val wrapper = MutableContextWrapper(context)
+        val created = factory(wrapper).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -48,6 +51,8 @@ object AndroidTabWebViewPool {
         val webView = pool.remove(tabId) ?: return
         try {
             webView.hideCustomViewIfShowing()
+            webView.dismissOAuthPopupIfShowing()
+            (webView.context as? MutableContextWrapper)?.baseContext = webView.context.applicationContext
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.stopLoading()
             webView.clearHistory()
@@ -80,23 +85,15 @@ object AndroidTabWebViewPool {
         }
     }
 
-    fun pauseAllMedia() {
+    fun dispatchMediaControl(action: String) {
         pool.values.forEach { webView ->
             try {
                 webView.post {
                     webView.evaluateJavascript(
                         """
                         (function() {
-                            window.__PEACH_EXTERNAL_PAUSED__ = true;
-                            if (typeof window.__PEACH_PAUSE_ALL_MEDIA__ === 'function') {
-                                window.__PEACH_PAUSE_ALL_MEDIA__();
-                            } else {
-                                document.querySelectorAll('audio, video').forEach(function(el) {
-                                    try {
-                                        el.__peach_sleep_timer_paused = true;
-                                        el.pause();
-                                    } catch(e) {}
-                                });
+                            if (typeof window.__PEACH_MEDIA_CONTROL__ === 'function') {
+                                window.__PEACH_MEDIA_CONTROL__('$action');
                             }
                         })();
                         """.trimIndent(),
@@ -109,36 +106,20 @@ object AndroidTabWebViewPool {
         }
     }
 
+    fun pauseAllMedia() {
+        dispatchMediaControl("pause")
+    }
+
     fun resumeActiveMedia() {
-        pool.values.forEach { webView ->
-            try {
-                webView.post {
-                    webView.evaluateJavascript(
-                        """
-                        (function() {
-                            window.__PEACH_EXTERNAL_PAUSED__ = false;
-                            if (typeof window.__PEACH_RESUME_ALL_MEDIA__ === 'function') {
-                                window.__PEACH_RESUME_ALL_MEDIA__();
-                            } else {
-                                document.querySelectorAll('audio, video').forEach(function(el) {
-                                    try {
-                                        el.__peach_sleep_timer_paused = false;
-                                        if (el.paused && !el.ended && el.currentTime > 0) {
-                                            var p = el.play();
-                                            if (p && typeof p.catch === 'function') p.catch(function(){});
-                                        }
-                                    } catch(e) {}
-                                });
-                            }
-                        })();
-                        """.trimIndent(),
-                        null
-                    )
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        dispatchMediaControl("play")
+    }
+
+    fun skipToNextMedia() {
+        dispatchMediaControl("next")
+    }
+
+    fun skipToPreviousMedia() {
+        dispatchMediaControl("previous")
     }
 
     fun duckAllMedia() {

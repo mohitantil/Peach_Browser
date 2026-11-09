@@ -23,14 +23,102 @@ object UrlSanitizer {
 
     private val GOOGLE_AMP_REGEX = Regex("""^https?://(?:www\.)?google\.[a-z.]+/amp/s/(.*)""", RegexOption.IGNORE_CASE)
 
+    private val IDENTITY_PROVIDER_DOMAINS = setOf(
+        "accounts.google.com",
+        "appleid.apple.com",
+        "login.microsoftonline.com",
+        "login.live.com",
+        "auth.openai.com",
+        "auth0.com",
+        "okta.com",
+        "clerk.com",
+        "clerk.accounts.dev"
+    )
+
+    data class ParsedUrl(
+        val host: String,
+        val path: String,
+        val queryParams: List<String>
+    )
+
+    fun parseUrl(url: String): ParsedUrl? {
+        try {
+            val trimmed = url.trim()
+            if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) {
+                return null
+            }
+            val withoutScheme = trimmed.substringAfter("://")
+            val authority = withoutScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+            val hostPart = authority.substringAfterLast('@').substringBefore(':').trim().lowercase()
+            if (hostPart.isBlank()) return null
+
+            val rest = withoutScheme.substring(authority.length)
+            val pathPart = if (rest.startsWith('/')) {
+                "/" + rest.substringBefore('?').substringBefore('#').trimStart('/')
+            } else {
+                "/"
+            }
+
+            val queryPart = if (trimmed.contains('?')) {
+                trimmed.substringAfter('?').substringBefore('#')
+            } else {
+                ""
+            }
+            val queryParams = if (queryPart.isNotBlank()) queryPart.split('&') else emptyList()
+
+            return ParsedUrl(host = hostPart, path = pathPart.lowercase(), queryParams = queryParams)
+        } catch (_: Exception) {
+            return null
+        }
+    }
+
+    fun isAuthOrOAuthUrl(url: String): Boolean {
+        val parsed = parseUrl(url) ?: return false
+        val host = parsed.host
+
+        // 1. Identity Provider Host Match (exact or subdomain)
+        if (IDENTITY_PROVIDER_DOMAINS.any { host == it || host.endsWith(".$it") }) {
+            return true
+        }
+
+        val queryKeys = parsed.queryParams.map { it.substringBefore('=').trim().lowercase() }.toSet()
+
+        // 2. RFC 6749 Section 4.1.1: Authorization Request
+        if (queryKeys.contains("client_id") && (queryKeys.contains("response_type") || queryKeys.contains("redirect_uri"))) {
+            return true
+        }
+
+        // 3. RFC 6749 Section 4.1.2 & 4.1.2.1: Authorization Response (Success or Error)
+        val hasAuthToken = queryKeys.contains("code") || queryKeys.contains("error")
+        if (hasAuthToken && queryKeys.contains("state")) {
+            return true
+        }
+        val path = parsed.path
+        val isCallbackPath = path.contains("/callback") || 
+                             path.contains("/oauth2/code/") || 
+                             path.contains("/auth/callback") ||
+                             path.endsWith("/callback")
+        if (hasAuthToken && isCallbackPath) {
+            return true
+        }
+
+        // 4. Known multi-purpose identity endpoints
+        if (host == "github.com" && path.startsWith("/login/oauth")) {
+            return true
+        }
+
+        return false
+    }
+
     /**
      * Bypasses Google AMP cache redirects to extract the canonical publisher URL.
      */
     fun deAmp(url: String): String {
         val trimmed = url.trim()
+        if (isAuthOrOAuthUrl(trimmed)) return url
         val match = GOOGLE_AMP_REGEX.find(trimmed) ?: return trimmed
         val canonical = match.groupValues[1]
-        return if (!canonical.startsWith("http://") && !canonical.startsWith("https://")) {
+        return if (!canonical.startsWith("http://", ignoreCase = true) && !canonical.startsWith("https://", ignoreCase = true)) {
             "https://$canonical"
         } else {
             canonical
@@ -38,46 +126,46 @@ object UrlSanitizer {
     }
 
     /**
-     * Strips intrusive cross-site query parameters while preserving functional ones.
+     * Strips intrusive cross-site query parameters while preserving functional ones and OAuth/SSO handshakes.
      */
     fun stripTrackingParams(url: String): String {
         val trimmed = url.trim()
-        val queryStartIndex = trimmed.indexOf('?')
-        if (queryStartIndex == -1) return trimmed
-
-        val baseUrl = trimmed.substring(0, queryStartIndex)
-        val queryAndHash = trimmed.substring(queryStartIndex + 1)
-        val hashStartIndex = queryAndHash.indexOf('#')
-
-        val queryString = if (hashStartIndex != -1) queryAndHash.substring(0, hashStartIndex) else queryAndHash
-        val hash = if (hashStartIndex != -1) queryAndHash.substring(hashStartIndex) else ""
-
-        val rawParams = queryString.split('&')
-        val cleanParams = mutableListOf<String>()
-
-        for (param in rawParams) {
-            if (param.isBlank()) continue
-            val key = param.substringBefore('=').trim().lowercase()
-            if (!TRACKING_PARAMS.contains(key)) {
-                cleanParams.add(param)
-            }
+        if (trimmed.isBlank() || (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true))) {
+            return url
+        }
+        if (isAuthOrOAuthUrl(trimmed)) {
+            return url
         }
 
-        return buildString {
-            append(baseUrl)
-            if (cleanParams.isNotEmpty()) {
-                append('?')
-                append(cleanParams.joinToString("&"))
-            }
-            append(hash)
+        val hashIndex = trimmed.indexOf('#')
+        val fragment = if (hashIndex != -1) trimmed.substring(hashIndex) else ""
+        val urlWithoutFragment = if (hashIndex != -1) trimmed.substring(0, hashIndex) else trimmed
+
+        val queryIndex = urlWithoutFragment.indexOf('?')
+        if (queryIndex == -1) return url
+
+        val basePath = urlWithoutFragment.substring(0, queryIndex)
+        val rawQuery = urlWithoutFragment.substring(queryIndex + 1)
+        if (rawQuery.isBlank()) return url
+
+        val allPairs = rawQuery.split('&')
+        val keptParams = allPairs.filter { pair ->
+            val key = pair.substringBefore('=').trim().lowercase()
+            key.isNotBlank() && !isTrackingParam(key)
+        }
+
+        return when {
+            keptParams.size == allPairs.size -> url
+            keptParams.isEmpty() -> "$basePath$fragment"
+            else -> "$basePath?${keptParams.joinToString("&")}$fragment"
         }
     }
 
-    /**
-     * Executes both De-AMPing and Query String Filtering in a single pass.
-     */
-    fun sanitize(url: String): String {
-        val deAmped = deAmp(url)
-        return stripTrackingParams(deAmped)
+    private fun isTrackingParam(param: String): Boolean {
+        if (TRACKING_PARAMS.contains(param)) return true
+        if (param.startsWith("utm_")) return true
+        return false
     }
+
+    fun sanitize(url: String): String = stripTrackingParams(deAmp(url))
 }

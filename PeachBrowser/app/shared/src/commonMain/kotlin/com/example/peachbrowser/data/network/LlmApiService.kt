@@ -41,7 +41,7 @@ class LlmApiService(private val httpClient: HttpClient) {
 
     suspend fun getCompletion(request: GroqRequest): GroqResponse {
         return httpClient.post(endpoint) {
-            header("Authorization", "Bearer \$apiKey")
+            header("Authorization", "Bearer $apiKey")
             contentType(ContentType.Application.Json)
             setBody(request)
         }.body()

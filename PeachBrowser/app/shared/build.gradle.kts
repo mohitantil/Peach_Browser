@@ -42,6 +42,9 @@ kotlin {
             implementation(libs.koin.android)
             implementation(libs.sqldelight.android)
         }
+        jvmMain.dependencies {
+            implementation(libs.sqldelight.sqlite)
+        }
         commonMain.dependencies {
             api(project(":core"))
             implementation(libs.compose.runtime)

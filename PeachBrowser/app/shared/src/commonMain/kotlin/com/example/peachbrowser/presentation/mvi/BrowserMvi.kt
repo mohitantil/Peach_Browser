@@ -7,11 +7,20 @@ val DEFAULT_SITE_EXCEPTIONS = setOf(
     "gemini.google.com",
     "aistudio.google.com",
     "chatgpt.com",
+    "openai.com",
     "claude.ai",
+    "anthropic.com",
     "deepseek.com",
     "z.ai",
     "qwen.ai",
-    "openrouter.ai"
+    "openrouter.ai",
+    "accounts.google.com",
+    "appleid.apple.com",
+    "login.microsoftonline.com",
+    "login.live.com",
+    "clerk.com",
+    "clerk.accounts.dev",
+    "auth0.com"
 )
 
 const val THIRTY_DAYS_MILLIS = 30L * 24L * 60L * 60L * 1000L
@@ -21,6 +30,14 @@ data class QuickLink(
     val title: String,
     val url: String,
     val iconEmoji: String = "🌐"
+)
+
+@Serializable
+data class MediaMetadataState(
+    val title: String = "",
+    val artist: String = "",
+    val artworkUrl: String = "",
+    val isPlaying: Boolean = false
 )
 
 enum class SleepTimerAction {
@@ -114,8 +131,14 @@ sealed interface BrowserIntent {
     object ResetDefaultSiteExceptions : BrowserIntent
     data class ShredSiteData(val host: String) : BrowserIntent
 
-    // Sleep Timer Intents
+    // Media & Sleep Timer Intents
     data class SetAudioPlaying(val isPlaying: Boolean) : BrowserIntent
+    data class UpdateMediaMetadata(
+        val title: String,
+        val artist: String,
+        val artworkUrl: String,
+        val isPlaying: Boolean
+    ) : BrowserIntent
     data class StartSleepTimer(val durationMinutes: Int, val action: SleepTimerAction = SleepTimerAction.PAUSE_PLAYBACK) : BrowserIntent
     object CancelSleepTimer : BrowserIntent
     data class ExtendSleepTimer(val additionalMinutes: Int) : BrowserIntent
@@ -138,10 +161,10 @@ data class BrowserState(
     val tabs: List<Tab> = listOf(Tab(id = "tab_1")),
     val activeTabId: String = "tab_1",
     val tabBackStack: List<String> = listOf("tab_1"),
-    val isBackgroundPlayEnabled: Boolean = false,
+    val isBackgroundPlayEnabled: Boolean = true,
     val isAdBlockEnabled: Boolean = true,
     val isPrivateMode: Boolean = false,
-    val isClearSessionOnExitEnabled: Boolean = true,
+    val isClearSessionOnExitEnabled: Boolean = false,
     val isTrackingProtectionEnabled: Boolean = true,
     val isFarblingEnabled: Boolean = true,
     val isDeAmpEnabled: Boolean = true,
@@ -149,6 +172,7 @@ data class BrowserState(
     val activePageContent: String = "",
     val activePageTitle: String = "",
     val isAudioPlaying: Boolean = false,
+    val mediaMetadata: MediaMetadataState = MediaMetadataState(),
     val sleepTimer: SleepTimerState = SleepTimerState(),
     val sessionDownloads: List<DownloadItem> = emptyList(),
     val downloads: List<DownloadItem> = emptyList(),

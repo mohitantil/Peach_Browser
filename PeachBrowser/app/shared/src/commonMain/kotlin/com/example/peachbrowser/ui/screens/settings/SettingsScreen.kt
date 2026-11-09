@@ -24,7 +24,7 @@ import com.example.peachbrowser.presentation.mvi.DEFAULT_SITE_EXCEPTIONS
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    isBackgroundPlayEnabled: Boolean,
+    isBackgroundPlayEnabled: Boolean = true,
     isAdBlockEnabled: Boolean = true,
     isPrivateMode: Boolean = false,
     isClearSessionOnExitEnabled: Boolean = true,

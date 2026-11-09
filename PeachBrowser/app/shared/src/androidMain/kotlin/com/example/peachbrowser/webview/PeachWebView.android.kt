@@ -192,8 +192,9 @@ object AdBlocker {
                             Uri.parse(request.requestHeaders?.get("Referer") ?: "").host?.lowercase() ?: ""
                         } catch (e: Exception) { "" }
                         if (isDomainMatching(reqHost, globalSiteExceptions) ||
-                            (refererHost.isNotBlank() && isDomainMatching(refererHost, globalSiteExceptions)) ||
-                            (currentMainFrameHost.isNotBlank() && isDomainMatching(currentMainFrameHost, globalSiteExceptions))
+                            isDomainMatching(reqHost, ESSENTIAL_STATIC_AND_SPA_DOMAINS) ||
+                            (refererHost.isNotBlank() && (isDomainMatching(refererHost, globalSiteExceptions) || isDomainMatching(refererHost, ESSENTIAL_STATIC_AND_SPA_DOMAINS))) ||
+                            (currentMainFrameHost.isNotBlank() && (isDomainMatching(currentMainFrameHost, globalSiteExceptions) || isDomainMatching(currentMainFrameHost, ESSENTIAL_STATIC_AND_SPA_DOMAINS)))
                         ) {
                             return null
                         }
@@ -365,14 +366,17 @@ class PeachNativeWebView(context: Context) : WebView(context) {
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val wMode = MeasureSpec.getMode(widthMeasureSpec)
+        val hMode = MeasureSpec.getMode(heightMeasureSpec)
         val wSize = MeasureSpec.getSize(widthMeasureSpec)
         val hSize = MeasureSpec.getSize(heightMeasureSpec)
-        val fixedWidthSpec = if (wSize > 0) {
+
+        val fixedWidthSpec = if (wMode == MeasureSpec.UNSPECIFIED && wSize > 0) {
             MeasureSpec.makeMeasureSpec(wSize, MeasureSpec.EXACTLY)
         } else {
             widthMeasureSpec
         }
-        val fixedHeightSpec = if (hSize > 0) {
+        val fixedHeightSpec = if (hMode == MeasureSpec.UNSPECIFIED && hSize > 0) {
             MeasureSpec.makeMeasureSpec(hSize, MeasureSpec.EXACTLY)
         } else {
             heightMeasureSpec
@@ -449,6 +453,15 @@ class PeachNativeWebView(context: Context) : WebView(context) {
         }
 
         onFullscreenChanged?.invoke(false)
+    }
+
+    var currentOAuthDialog: android.app.Dialog? = null
+
+    fun dismissOAuthPopupIfShowing() {
+        try {
+            currentOAuthDialog?.dismiss()
+            currentOAuthDialog = null
+        } catch (_: Exception) {}
     }
 
     private fun isSamePageOrRedirect(url1: String, url2: String): Boolean {
@@ -699,13 +712,13 @@ actual fun PeachWebView(
                         databaseEnabled = true
                         cacheMode = WebSettings.LOAD_DEFAULT
                         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                        setSupportMultipleWindows(false)
+                        setSupportMultipleWindows(true)
                         javaScriptCanOpenWindowsAutomatically = true
                         allowFileAccess = true
                         allowContentAccess = true
                         mediaPlaybackRequiresUserGesture = false
                         useWideViewPort = true
-                        loadWithOverviewMode = false
+                        loadWithOverviewMode = true
                         val defaultUa = userAgentString ?: ""
                         userAgentString = defaultUa
                             .replace("; wv)", ")")
@@ -873,7 +886,7 @@ actual fun PeachWebView(
                             }
 
                             view?.evaluateJavascript(
-                                "(function() { return (document.title || '') + '\\n\\n' + (document.body ? document.body.innerText.substring(0, 3000) : ''); })();"
+                                "(function() { return (document.title || '') + '\\n\\n' + (document.body ? (document.body.textContent || '').substring(0, 3000) : ''); })();"
                             ) { rawResult ->
                                 if (!rawResult.isNullOrBlank() && rawResult != "null") {
                                     val cleanText = rawResult.trim('\"')
@@ -1011,31 +1024,60 @@ actual fun PeachWebView(
                             resultMsg: Message?
                         ): Boolean {
                             if (resultMsg == null || view == null) return false
-                            val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-                            val tempWebView = WebView(view.context).apply {
-                                webViewClient = object : WebViewClient() {
-                                    override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
-                                        val targetUrl = request?.url?.toString()
-                                        if (!targetUrl.isNullOrBlank()) {
-                                            lastLoadedUrl = targetUrl
-                                            view.loadUrl(targetUrl)
-                                        }
-                                        v?.destroy()
-                                        return true
-                                    }
+                            val act = (view.context as? android.content.MutableContextWrapper)?.baseContext as? Activity
+                                ?: view.context as? Activity
+                                ?: return false
 
-                                    @Deprecated("Deprecated in Java")
-                                    override fun shouldOverrideUrlLoading(v: WebView?, targetUrl: String?): Boolean {
-                                        if (!targetUrl.isNullOrBlank()) {
-                                            lastLoadedUrl = targetUrl
-                                            view.loadUrl(targetUrl)
-                                        }
-                                        v?.destroy()
-                                        return true
+                            val popupWebView = WebView(view.context).apply {
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                settings.setSupportMultipleWindows(true)
+                                settings.javaScriptCanOpenWindowsAutomatically = true
+                                settings.userAgentString = view.settings.userAgentString
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            }
+
+                            val dialog = android.app.Dialog(act, android.R.style.Theme_DeviceDefault_Light_NoActionBar_Fullscreen).apply {
+                                setContentView(popupWebView)
+                                setOnDismissListener {
+                                    try {
+                                        popupWebView.destroy()
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                            (view as? PeachNativeWebView)?.currentOAuthDialog = dialog
+
+                            popupWebView.webChromeClient = object : WebChromeClient() {
+                                override fun onCloseWindow(window: WebView?) {
+                                    try {
+                                        dialog.dismiss()
+                                        (view as? PeachNativeWebView)?.currentOAuthDialog = null
+                                    } catch (_: Exception) {}
+                                }
+                            }
+
+                            popupWebView.webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                                    val u = request?.url?.toString() ?: ""
+                                    if (u.startsWith("http://") || u.startsWith("https://")) {
+                                        return false
+                                    }
+                                    return try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(u))
+                                        v?.context?.startActivity(intent)
+                                        true
+                                    } catch (_: Exception) {
+                                        false
                                     }
                                 }
                             }
-                            transport.webView = tempWebView
+
+                            dialog.show()
+                            val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                            transport.webView = popupWebView
                             resultMsg.sendToTarget()
                             return true
                         }
@@ -1048,6 +1090,15 @@ actual fun PeachWebView(
                             fun onMediaStateChanged(isPlaying: Boolean) {
                                 post {
                                     browserViewModel.processIntent(BrowserIntent.SetAudioPlaying(isPlaying))
+                                }
+                            }
+
+                            @android.webkit.JavascriptInterface
+                            fun onMediaMetadataUpdated(title: String, artist: String, artworkUrl: String, isPlaying: Boolean) {
+                                post {
+                                    browserViewModel.processIntent(
+                                        BrowserIntent.UpdateMediaMetadata(title, artist, artworkUrl, isPlaying)
+                                    )
                                 }
                             }
 
@@ -1078,40 +1129,6 @@ actual fun PeachWebView(
                         },
                         "PeachNativeBridge"
                     )
-
-                    setDownloadListener { downloadUrl, userAgent, contentDisposition, mimetype, _ ->
-                        try {
-                            val guessedFileName = URLUtil.guessFileName(downloadUrl, contentDisposition, mimetype)
-                            val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                            val request = DownloadManager.Request(Uri.parse(downloadUrl)).apply {
-                                setMimeType(mimetype)
-                                val cookies = CookieManager.getInstance().getCookie(downloadUrl)
-                                if (!cookies.isNullOrBlank()) {
-                                    addRequestHeader("cookie", cookies)
-                                }
-                                addRequestHeader("User-Agent", userAgent)
-                                setDescription("Downloading with Peach Browser...")
-                                setTitle(guessedFileName)
-                                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, guessedFileName)
-                            }
-                            val downloadId = dm.enqueue(request)
-                            browserViewModel.processIntent(
-                                BrowserIntent.AddDownload(
-                                    DownloadItem(
-                                        id = downloadId,
-                                        fileName = guessedFileName,
-                                        url = downloadUrl,
-                                        progress = 0,
-                                        isCompleted = false,
-                                        timestamp = com.example.peachbrowser.currentTimeMillis()
-                                    )
-                                )
-                            )
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
 
                     onFullscreenChanged = { isFullscreen ->
                         controller?.isCustomViewShowing = isFullscreen
@@ -1236,9 +1253,11 @@ actual fun PeachWebView(
                 currentHost == it.key || currentHost.endsWith(".${it.key}")
             }?.value
             val shouldBlockScripts = !isException && (siteConfig?.shieldsUp == true && siteConfig.blockScripts)
-            webView.settings.javaScriptEnabled = !shouldBlockScripts
-            webView.settings.domStorageEnabled = true
-            webView.settings.databaseEnabled = true
+            if (webView.settings.javaScriptEnabled != !shouldBlockScripts) {
+                webView.settings.javaScriptEnabled = !shouldBlockScripts
+            }
+            if (!webView.settings.domStorageEnabled) webView.settings.domStorageEnabled = true
+            if (!webView.settings.databaseEnabled) webView.settings.databaseEnabled = true
 
             if (webView.appliedReloadTrigger != browserState.shouldReloadTrigger) {
                 webView.appliedReloadTrigger = browserState.shouldReloadTrigger
@@ -1257,8 +1276,9 @@ actual fun PeachWebView(
                 }
             }
 
-            val canBack = webView.canGoBackSmartly()
-            controller?.canGoBack = canBack
+            if (controller?.canGoBack != webView.canGoBack()) {
+                controller?.canGoBack = webView.canGoBackSmartly()
+            }
             controller?.canGoForward = webView.canGoForward()
 
             controller?.goBackAction = {

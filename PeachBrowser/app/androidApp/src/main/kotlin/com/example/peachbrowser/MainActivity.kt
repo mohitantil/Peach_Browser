@@ -1,18 +1,27 @@
 package com.example.peachbrowser
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import android.content.Intent
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.peachbrowser.presentation.viewmodel.BrowserViewModel
 import com.example.peachbrowser.service.PeachMediaService
 import com.example.peachbrowser.util.ExternalLinkRouter
 import com.example.peachbrowser.util.MediaDetector
 import com.example.peachbrowser.util.PeachAudioFocusManager
 import com.example.peachbrowser.webview.AndroidTabWebViewPool
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
@@ -24,6 +33,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        requestNotificationPermissionIfNeeded()
+
         if (savedInstanceState == null &&
             (browserViewModel.state.value.isClearSessionOnExitEnabled || browserViewModel.state.value.isPrivateMode)
         ) {
@@ -31,9 +42,47 @@ class MainActivity : ComponentActivity() {
         }
 
         handleIncomingIntent(intent)
+        observeMediaStateForPersistentNotification()
 
         setContent {
             App()
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    9001
+                )
+            }
+        }
+    }
+
+    private fun observeMediaStateForPersistentNotification() {
+        lifecycleScope.launch {
+            browserViewModel.state
+                .map { Triple(it.isBackgroundPlayEnabled, it.isAudioPlaying, it.mediaMetadata) }
+                .distinctUntilChanged()
+                .collect { (bgEnabled, isPlaying, meta) ->
+                    if (bgEnabled && (isPlaying || meta.title.isNotBlank())) {
+                        if (isPlaying) {
+                            audioFocusManager.requestAudioFocus()
+                        }
+                        PeachMediaService.startOrUpdate(
+                            context = this@MainActivity,
+                            title = meta.title.ifBlank { browserViewModel.state.value.activePageTitle.ifBlank { "Peach Browser" } },
+                            artist = meta.artist.ifBlank { browserViewModel.state.value.currentUrl },
+                            isPlaying = isPlaying
+                        )
+                    } else if (!bgEnabled) {
+                        PeachMediaService.stop(this@MainActivity)
+                    }
+                }
         }
     }
 
@@ -71,7 +120,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        // Clear processed intent data to prevent duplicate triggering on activity restart
         incomingIntent.data = null
         incomingIntent.removeExtra(Intent.EXTRA_TEXT)
         incomingIntent.removeExtra(Intent.EXTRA_STREAM)
@@ -94,8 +142,12 @@ class MainActivity : ComponentActivity() {
             val activeUrl = state.currentTab?.url ?: ""
             val isStreamingSite = MediaDetector.isKnownStreamingSite(activeUrl)
             if (state.isBackgroundPlayEnabled && (state.isAudioPlaying || isStreamingSite)) {
-                PeachMediaService.start(this)
-                // Ensure active WebView timers remain unthrottled while backgrounded
+                PeachMediaService.startOrUpdate(
+                    context = this,
+                    title = state.mediaMetadata.title.ifBlank { state.activePageTitle.ifBlank { "Peach Browser" } },
+                    artist = state.mediaMetadata.artist.ifBlank { activeUrl },
+                    isPlaying = state.isAudioPlaying
+                )
                 state.currentTab?.id?.let { tabId ->
                     AndroidTabWebViewPool.get(tabId)?.resumeTimers()
                 }
@@ -113,7 +165,6 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         try {
             com.example.peachbrowser.webview.AppBackgroundTracker.updateBackgroundState(false)
-            PeachMediaService.stop(this)
             val activeTabId = browserViewModel.state.value.activeTabId
             AndroidTabWebViewPool.get(activeTabId)?.let { webView ->
                 webView.onResume()

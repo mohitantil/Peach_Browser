@@ -41,17 +41,34 @@ actual fun exitBrowserApp() {
 
 actual fun shredSiteData(host: String) {
     try {
-        val cleanHost = host.trim().lowercase()
+        val cleanHost = host.trim()
+            .lowercase()
+            .removePrefix("https://")
+            .removePrefix("http://")
+            .substringBefore("/")
+            .substringBefore("?")
+            .substringBefore(":")
+            .trim()
+        if (cleanHost.isBlank()) return
+
         val webStorage = WebStorage.getInstance()
         webStorage.deleteOrigin("https://$cleanHost")
         webStorage.deleteOrigin("http://$cleanHost")
+
         val cookieManager = CookieManager.getInstance()
-        val cookies = cookieManager.getCookie(cleanHost)
-        if (!cookies.isNullOrBlank()) {
-            val parts = cookies.split(";")
-            for (part in parts) {
-                val cookieName = part.substringBefore("=").trim()
-                cookieManager.setCookie(cleanHost, "$cookieName=; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+        val schemes = listOf("https://$cleanHost", "http://$cleanHost")
+        for (url in schemes) {
+            val cookies = cookieManager.getCookie(url)
+            if (!cookies.isNullOrBlank()) {
+                val cookieList = cookies.split(";")
+                for (cookie in cookieList) {
+                    val cookieName = cookie.substringBefore("=").trim()
+                    if (cookieName.isNotEmpty()) {
+                        cookieManager.setCookie(url, "$cookieName=; Path=/; Domain=$cleanHost; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+                        cookieManager.setCookie(url, "$cookieName=; Path=/; Domain=.$cleanHost; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+                        cookieManager.setCookie(url, "$cookieName=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+                    }
+                }
             }
         }
         cookieManager.flush()
