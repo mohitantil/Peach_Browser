@@ -21,7 +21,10 @@ object UrlSanitizer {
         "yclid", "wickedid", "zanpid", "rb_clickid", "s_kwcid"
     )
 
-    private val GOOGLE_AMP_REGEX = Regex("""^https?://(?:www\.)?google\.[a-z.]+/amp/s/(.*)""", RegexOption.IGNORE_CASE)
+    private val GOOGLE_AMP_REGEX = Regex(
+        """^https?://(?:www\.)?google\.(?:[a-z]{2,3}(?:\.[a-z]{2})?)/amp/s/(.*)""",
+        RegexOption.IGNORE_CASE
+    )
 
     private val IDENTITY_PROVIDER_DOMAINS = setOf(
         "accounts.google.com",

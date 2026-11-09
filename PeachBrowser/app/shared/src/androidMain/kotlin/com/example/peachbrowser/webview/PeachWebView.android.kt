@@ -899,6 +899,11 @@ actual fun PeachWebView(
                                     targetUrl = UrlSanitizer.stripTrackingParams(targetUrl)
                                 }
                                 if (targetUrl != reqUrl) {
+                                    val newHost = try { Uri.parse(targetUrl).host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                                    if (newHost.isNotBlank()) {
+                                        currentMainFrameHost = newHost
+                                        AdBlocker.currentMainFrameHost = newHost
+                                    }
                                     view?.loadUrl(targetUrl)
                                     return true
                                 }
@@ -1019,7 +1024,7 @@ actual fun PeachWebView(
                                     javaScriptEnabled = true
                                     domStorageEnabled = true
                                     databaseEnabled = true
-                                    setSupportMultipleWindows(true)
+                                    setSupportMultipleWindows(false)
                                     javaScriptCanOpenWindowsAutomatically = true
                                     useWideViewPort = true
                                     loadWithOverviewMode = true

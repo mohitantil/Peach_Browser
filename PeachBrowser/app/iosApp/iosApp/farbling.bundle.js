@@ -5,9 +5,15 @@
     'use strict';
 
     if (window.__PEACH_FARBLER_ACTIVE__) return;
-    if (window !== window.top) return;
 
-    const currentHost = (location.hostname || '').toLowerCase();
+    let currentHost = '';
+    try {
+        currentHost = (location.hostname || '').toLowerCase();
+        if (!currentHost && window.top && window.top.location) {
+            currentHost = (window.top.location.hostname || '').toLowerCase();
+        }
+    } catch (e) { }
+
     if (!currentHost) return;
 
     const spaAllowlist = [
@@ -24,47 +30,47 @@
         return;
     }
 
-        try {
-            if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isFarblingActive === 'function') {
-                if (!window.PeachNativeBridge.isFarblingActive(currentHost)) {
-                    return;
-                }
-            } else if (window.__PEACH_CONFIG__) {
-                if (window.__PEACH_CONFIG__.isSiteException === true || window.__PEACH_CONFIG__.farblingActive === false) {
-                    return;
-                }
+    try {
+        if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isFarblingActive === 'function') {
+            if (!window.PeachNativeBridge.isFarblingActive(currentHost)) {
+                return;
             }
-        } catch (e) { }
+        } else if (window.__PEACH_CONFIG__) {
+            if (window.__PEACH_CONFIG__.isSiteException === true || window.__PEACH_CONFIG__.farblingActive === false) {
+                return;
+            }
+        }
+    } catch (e) { }
 
-        window.__PEACH_FARBLER_ACTIVE__ = true;
+    window.__PEACH_FARBLER_ACTIVE__ = true;
 
-            try {
-                let seed = 0;
-                for (let i = 0; i < currentHost.length; i++) {
-                    seed = ((seed << 5) - seed) + currentHost.charCodeAt(i);
-                    seed |= 0;
-                }
+    try {
+        let seed = 0;
+        for (let i = 0; i < currentHost.length; i++) {
+            seed = ((seed << 5) - seed) + currentHost.charCodeAt(i);
+            seed |= 0;
+        }
 
-                const pseudoRandom = () => {
-                    seed = (Math.abs(seed * 9301 + 49297)) % 233280;
-                    return seed / 233280;
-                };
+        const pseudoRandom = () => {
+            seed = (Math.abs(seed * 9301 + 49297)) % 233280;
+            return seed / 233280;
+        };
 
-                            if (typeof CanvasRenderingContext2D !== 'undefined' && CanvasRenderingContext2D.prototype.getImageData) {
-                                const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-                                CanvasRenderingContext2D.prototype.getImageData = new Proxy(origGetImageData, {
-                                    apply(target, thisArg, argArray) {
-                                        const imageData = Reflect.apply(target, thisArg, argArray);
-                                        try {
-                                            if (imageData && imageData.data && imageData.data.length > 16) {
-                                                const canvasW = thisArg && thisArg.canvas ? thisArg.canvas.width : argArray[2];
-                                                const canvasH = thisArg && thisArg.canvas ? thisArg.canvas.height : argArray[3];
-                                                if (canvasW > 0 && canvasW <= 64 && canvasH > 0 && canvasH <= 64) {
-                                                    const pixelIndex = Math.floor(pseudoRandom() * (imageData.data.length / 4)) * 4;
-                                                    if (pixelIndex >= 0 && pixelIndex < imageData.data.length) {
-                                                        imageData.data[pixelIndex] = imageData.data[pixelIndex] ^ 1;
-                                                    }
-                                                }
+        if (typeof CanvasRenderingContext2D !== 'undefined' && CanvasRenderingContext2D.prototype.getImageData) {
+            const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+            CanvasRenderingContext2D.prototype.getImageData = new Proxy(origGetImageData, {
+                apply(target, thisArg, argArray) {
+                    const imageData = Reflect.apply(target, thisArg, argArray);
+                    try {
+                        if (imageData && imageData.data && imageData.data.length > 16) {
+                            const canvasW = thisArg && thisArg.canvas ? thisArg.canvas.width : argArray[2];
+                            const canvasH = thisArg && thisArg.canvas ? thisArg.canvas.height : argArray[3];
+                            if (canvasW > 0 && canvasW <= 64 && canvasH > 0 && canvasH <= 64) {
+                                const pixelIndex = Math.floor(pseudoRandom() * (imageData.data.length / 4)) * 4;
+                                if (pixelIndex >= 0 && pixelIndex < imageData.data.length) {
+                                    imageData.data[pixelIndex] = imageData.data[pixelIndex] ^ 1;
+                                }
+                            }
                         }
                     } catch (e) { }
                     return imageData;
@@ -84,10 +90,10 @@
                                 data[idx] += (pseudoRandom() - 0.5) * 0.0000001;
                             }
                         }
-        } catch (e) { }
-        return data;
-    }
-});
+                    } catch (e) { }
+                    return data;
+                }
+            });
         }
     } catch (e) { }
-}) ();
+})();

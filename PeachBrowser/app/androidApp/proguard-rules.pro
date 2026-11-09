@@ -5,7 +5,10 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
--keepattributes JavascriptInterface
+-keepattributes *Annotation*
 -keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepclasseswithmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }

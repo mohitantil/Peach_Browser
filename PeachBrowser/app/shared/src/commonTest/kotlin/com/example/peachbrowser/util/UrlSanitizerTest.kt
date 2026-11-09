@@ -79,5 +79,22 @@ class UrlSanitizerTest {
         val gAdsLink = "https://example.com/product?gbraid=abc&wbraid=def"
         assertEquals("https://example.com/product", UrlSanitizer.stripTrackingParams(gAdsLink))
     }
+
+    @Test
+    fun testDeAmpSecurityAndNegativeTests() {
+        // Genuine Google AMP should be de-amped
+        val genuineAmp = "https://www.google.com/amp/s/example.com/article"
+        assertEquals("https://example.com/article", UrlSanitizer.deAmp(genuineAmp))
+
+        val googleCoUkAmp = "https://google.co.uk/amp/s/example.com/article"
+        assertEquals("https://example.com/article", UrlSanitizer.deAmp(googleCoUkAmp))
+
+        // Phishing / spoofing attempt with google subdomain MUST NOT be de-amped
+        val spoofedAmp = "https://google.evil.com/amp/s/phishing.com"
+        assertEquals(spoofedAmp, UrlSanitizer.deAmp(spoofedAmp))
+
+        val attackerDomain = "https://google.attacker.org/amp/s/fake.com"
+        assertEquals(attackerDomain, UrlSanitizer.deAmp(attackerDomain))
+    }
 }
 

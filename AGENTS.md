@@ -284,4 +284,19 @@
     - Updated `MainActivity.kt` `ensureBackgroundMediaServiceState` to only spawn notification when media is actively playing (`state.isAudioPlaying || PeachMediaService.isServiceRunning`).
     - Added user-dismissible "Secure Sign-In" header bar with `✕` close button to OAuth popup dialog in `PeachWebView.android.kt`.
     - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 1m 18s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 9s`).
+  - Independent Multi-Agent Review Remediation (`v5.1.1`):
+    - Subagent 1 (Privacy & WebKit Security) Remediation:
+      - Constrained `GOOGLE_AMP_REGEX` in `UrlSanitizer.kt` to genuine Google ccTLDs (`(?:[a-z]{2,3}(?:\.[a-z]{2})?)`), blocking open redirect/phishing bypasses like `google.evil.com/amp/s/`. Added negative unit tests in `UrlSanitizerTest.kt`.
+      - Hardened cookie shredding in `PlatformSession.android.kt` for RFC 6265bis `__Host-` and `__Secure-` cookies (added required `; Secure` flag and omitted `Domain` on `__Host-` cookies).
+      - Synchronized cookie removal callback with process termination in `exitBrowserApp()`.
+      - Enabled farbling inside subframes/iframes in `farbling.bundle.js` (Android & iOS).
+      - Set `setSupportMultipleWindows(false)` on OAuth `popupWebView` in `PeachWebView.android.kt` so auxiliary links (`target="_blank"`) navigate inside the popup without dead clicks.
+      - Updated `currentMainFrameHost` immediately in `handleUrlLoading` on main frame redirects.
+    - Subagent 2 (Architecture & Concurrency) Remediation:
+      - Removed conflicting external `audioFocusManager.requestAudioFocus()` from `MainActivity.kt`, allowing Chromium's native audio engine to retain uninterrupted focus.
+      - Synchronized `acquireLocks()` and `releaseLocks()` inside `updateMediaSessionAndNotification()` in `PeachMediaService.kt` for lock-screen/notification media actions.
+      - Made tab closure atomic in `BrowserViewModel.kt:CloseTab` in a single `_state.value.copy(...)` update, preventing Compose recomposition with stale active tab IDs and eliminating zombie WebView memory leaks in `AndroidTabWebViewPool`.
+      - Guarded `BrowserViewModel.kt:UpdateTabNavState` with state equality checks to eliminate unnecessary recompositions on SPA hash updates.
+      - Updated `proguard-rules.pro` with `-keepattributes *Annotation*` and `-keepclasseswithmembers` to preserve `@JavascriptInterface` on bridge objects under R8 minification.
+      - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 52s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 41s`).
 

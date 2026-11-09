@@ -77,7 +77,6 @@ class MainActivity : ComponentActivity() {
                     }
                     if (isPlaying) {
                         wasMediaSessionActive = true
-                        audioFocusManager.requestAudioFocus()
                         PeachMediaService.startOrUpdate(
                             context = this@MainActivity,
                             title = meta.title.ifBlank { browserViewModel.state.value.activePageTitle.ifBlank { "Peach Browser" } },

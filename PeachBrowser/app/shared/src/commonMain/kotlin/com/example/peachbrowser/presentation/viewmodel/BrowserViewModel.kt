@@ -313,10 +313,13 @@ class BrowserViewModel(
                     } else it
                 }
                 val activeTab = updatedTabs.find { it.id == currentState.activeTabId }
-                _state.value = currentState.copy(
-                    tabs = updatedTabs,
-                    activePageTitle = activeTab?.title ?: currentState.activePageTitle
-                )
+                val newTitle = activeTab?.title ?: currentState.activePageTitle
+                if (updatedTabs != currentState.tabs || newTitle != currentState.activePageTitle) {
+                    _state.value = currentState.copy(
+                        tabs = updatedTabs,
+                        activePageTitle = newTitle
+                    )
+                }
             }
             is BrowserIntent.UpdatePageContent -> {
                 _state.value = _state.value.copy(activePageContent = intent.content)
@@ -389,19 +392,16 @@ class BrowserViewModel(
                 processIntent(BrowserIntent.CloseTab(_state.value.activeTabId))
             }
             is BrowserIntent.CloseTab -> {
-                releaseTabWebView(intent.tabId)
-                if (_state.value.activeTabId == intent.tabId) {
+                val isClosingActive = _state.value.activeTabId == intent.tabId
+                if (isClosingActive) {
                     stopPlatformMediaService()
-                    _state.value = _state.value.copy(
-                        isAudioPlaying = false,
-                        mediaMetadata = com.example.peachbrowser.presentation.mvi.MediaMetadataState()
-                    )
                 }
+                releaseTabWebView(intent.tabId)
                 val remainingTabs = _state.value.tabs.filter { it.id != intent.tabId }
                 val remainingBackStack = _state.value.tabBackStack.filter { it != intent.tabId }
 
                 if (remainingTabs.isNotEmpty()) {
-                    val nextActiveId = if (_state.value.activeTabId == intent.tabId) {
+                    val nextActiveId = if (isClosingActive) {
                         remainingBackStack.lastOrNull() ?: remainingTabs.last().id
                     } else {
                         _state.value.activeTabId
@@ -412,7 +412,9 @@ class BrowserViewModel(
                         tabs = remainingTabs,
                         activeTabId = nextActiveId,
                         tabBackStack = finalBackStack,
-                        activePageTitle = nextActiveTab?.title ?: "New Tab"
+                        activePageTitle = nextActiveTab?.title ?: "New Tab",
+                        isAudioPlaying = if (isClosingActive) false else _state.value.isAudioPlaying,
+                        mediaMetadata = if (isClosingActive) com.example.peachbrowser.presentation.mvi.MediaMetadataState() else _state.value.mediaMetadata
                     )
                 } else {
                     val defaultTab = Tab(
@@ -427,7 +429,9 @@ class BrowserViewModel(
                         tabs = listOf(defaultTab),
                         activeTabId = defaultTab.id,
                         tabBackStack = listOf(defaultTab.id),
-                        activePageTitle = "New Tab"
+                        activePageTitle = "New Tab",
+                        isAudioPlaying = false,
+                        mediaMetadata = com.example.peachbrowser.presentation.mvi.MediaMetadataState()
                     )
                 }
             }

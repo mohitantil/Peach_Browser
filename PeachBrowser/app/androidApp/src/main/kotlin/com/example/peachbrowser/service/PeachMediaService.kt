@@ -147,6 +147,11 @@ class PeachMediaService : Service() {
 
     private fun updateMediaSessionAndNotification() {
         updateMediaSessionState()
+        if (isPlaying) {
+            acquireLocks()
+        } else {
+            releaseLocks()
+        }
         val manager = getSystemService(NotificationManager::class.java)
         manager?.notify(NOTIFICATION_ID, buildNotification())
     }

@@ -17,6 +17,7 @@ actual fun clearBrowserSession() {
 
 actual fun stopPlatformMediaService() {
     try {
+        com.example.peachbrowser.webview.AndroidTabWebViewPool.pauseAllMedia()
         AndroidContextHolder.context?.let { ctx ->
             val intent = android.content.Intent().apply {
                 component = android.content.ComponentName(
@@ -33,9 +34,15 @@ actual fun stopPlatformMediaService() {
 
 actual fun exitBrowserApp() {
     try {
-        clearBrowserSession()
         stopPlatformMediaService()
-        android.os.Process.killProcess(android.os.Process.myPid())
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.removeAllCookies {
+            try {
+                cookieManager.flush()
+                WebStorage.getInstance().deleteAllData()
+            } catch (_: Exception) {}
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
     } catch (e: Exception) {
         kotlin.system.exitProcess(0)
     }
@@ -66,9 +73,17 @@ actual fun shredSiteData(host: String) {
                 for (cookie in cookieList) {
                     val cookieName = cookie.substringBefore("=").trim()
                     if (cookieName.isNotEmpty()) {
-                        cookieManager.setCookie(url, "$cookieName=; Path=/; Domain=$cleanHost; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
-                        cookieManager.setCookie(url, "$cookieName=; Path=/; Domain=.$cleanHost; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
-                        cookieManager.setCookie(url, "$cookieName=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+                        val isHostPrefixed = cookieName.startsWith("__Host-", ignoreCase = true)
+                        val isSecurePrefixed = cookieName.startsWith("__Secure-", ignoreCase = true)
+                        val secureFlag = if (isHostPrefixed || isSecurePrefixed || url.startsWith("https://")) "; Secure" else ""
+
+                        if (isHostPrefixed) {
+                            cookieManager.setCookie(url, "$cookieName=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT$secureFlag")
+                        } else {
+                            cookieManager.setCookie(url, "$cookieName=; Path=/; Domain=$cleanHost; Expires=Thu, 01 Jan 1970 00:00:00 GMT$secureFlag")
+                            cookieManager.setCookie(url, "$cookieName=; Path=/; Domain=.$cleanHost; Expires=Thu, 01 Jan 1970 00:00:00 GMT$secureFlag")
+                            cookieManager.setCookie(url, "$cookieName=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT$secureFlag")
+                        }
                     }
                 }
             }
