@@ -167,9 +167,9 @@ object AdBlocker {
                 path.startsWith("/pagead/") ||
                 path.startsWith("/ptracking") ||
                 path.contains("/ad_break") ||
-                path.contains("/ad_") ||
                 path.contains("get_midroll_info") ||
-                url.getQueryParameter("adformat") != null
+                url.getQueryParameter("adformat") != null ||
+                url.getQueryParameter("ad_type") != null
             ) {
                 return true
             }

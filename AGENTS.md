@@ -311,4 +311,13 @@
       - Real-Time Watchdog & Playback Safety: Added high-frequency watchdog with playback event listeners (`timeupdate`, `playing`, `loadedmetadata`), isolated strictly to video ads (never feed cards), with automatic `playbackRate` reset to 1.0x when ads finish.
       - Network-Level Request Blocking: Enhanced `AdBlocker.isAdRequest` in `PeachWebView.android.kt` matching `/youtubei/v1/player/ad_break`, `/get_midroll_info`, `/ptracking`, and `adformat` query parameters.
     - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 13s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 11s`).
+  - Production YouTube Ad-Free & Pre-Roll Zero-Delay Engine Hardening (`v5.1.1`):
+    - Resolved Root Causes of YouTube Ad & Pre-Roll Pause Leaks:
+      1. Network Header Corruption in Fetch: In `privacy_shield.bundle.js`, constructing `new Response(JSON.stringify(cleaned), { headers: response.headers })` preserved `content-encoding: gzip/br` and `content-length` from compressed responses, triggering silent decompression failures in Blink and falling back to unstripped ad responses. Fixed by cloning headers and deleting `content-encoding` and `content-length`.
+      2. Ad Break Array Emptiness: Replaced `delete json.adPlacements` with empty array assignments (`json.adPlacements = []`, `json.adSlots = []`, `json.playerAds = []`), preventing `TypeError` on `.length` in YouTube's minified player script.
+      3. Mobile InnerTube Sponsored Recommendation Badging: Enhanced `isSponsoredItem()` in `stripAdsFromNextResponse` to inspect `badges` arrays for `"Sponsored"` and `BADGE_STYLE_TYPE_SPONSORED` across `compactVideoRenderer` and `videoWithContextRenderer`, and added `compactPromotedItemRenderer` and `compactPromotedVideoRenderer`.
+      4. Mobile Recommendation CSS Selectors: Added `:has([aria-label*="Sponsored" i])`, `ytm-compact-promoted-item-renderer`, `ytm-compact-promoted-video-renderer`, and `.ytm-badge-and-byline-item-byline:has(.ad-badge)` to cosmetic stylesheet.
+      5. False-Positive Path Matching in AdBlocker: Replaced over-broad `path.contains("/ad_")` with explicit `path.contains("/ad_break")` and `url.getQueryParameter("ad_type") != null`, preventing false-positive blocking of YouTube player modules that previously caused playback stalling.
+    - Verified compilation (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 11s`), build & physical device installation (`:app:androidApp:installDebug` on `V2246 - 15`, `BUILD SUCCESSFUL in 1m 24s`).
+
 
