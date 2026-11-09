@@ -154,17 +154,21 @@ class MainActivity : ComponentActivity() {
             val state = browserViewModel.state.value
             val activeUrl = state.currentTab?.url ?: ""
             val isStreamingSite = MediaDetector.isKnownStreamingSite(activeUrl)
-            if (state.isBackgroundPlayEnabled && (state.isAudioPlaying || isStreamingSite)) {
-                PeachMediaService.startOrUpdate(
-                    context = this,
-                    title = state.mediaMetadata.title.ifBlank { state.activePageTitle.ifBlank { "Peach Browser" } },
-                    artist = state.mediaMetadata.artist.ifBlank { activeUrl },
-                    isPlaying = state.isAudioPlaying
-                )
-                state.currentTab?.id?.let { tabId ->
-                    AndroidTabWebViewPool.get(tabId)?.resumeTimers()
+            if (state.isBackgroundPlayEnabled) {
+                if (state.isAudioPlaying || PeachMediaService.isServiceRunning) {
+                    PeachMediaService.startOrUpdate(
+                        context = this,
+                        title = state.mediaMetadata.title.ifBlank { state.activePageTitle.ifBlank { "Peach Browser" } },
+                        artist = state.mediaMetadata.artist.ifBlank { activeUrl },
+                        isPlaying = state.isAudioPlaying
+                    )
                 }
-            } else if (!state.isBackgroundPlayEnabled) {
+                if (state.isAudioPlaying || isStreamingSite) {
+                    state.currentTab?.id?.let { tabId ->
+                        AndroidTabWebViewPool.get(tabId)?.resumeTimers()
+                    }
+                }
+            } else {
                 PeachMediaService.stop(this)
                 AndroidTabWebViewPool.pauseAllMedia()
                 audioFocusManager.abandonAudioFocus()

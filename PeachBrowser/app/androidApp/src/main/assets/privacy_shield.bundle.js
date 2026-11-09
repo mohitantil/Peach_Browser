@@ -12,7 +12,7 @@
         if (!currentHost && window.top && window.top.location) {
             currentHost = (window.top.location.hostname || '').toLowerCase();
         }
-    } catch (e) { }
+    } catch (e) {}
 
     if (!currentHost) return;
 
@@ -33,50 +33,48 @@
         return;
     }
 
-        try {
-            if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isShieldActive === 'function') {
-                if (!window.PeachNativeBridge.isShieldActive(currentHost)) {
-                    return;
-                }
-            } else if (window.__PEACH_CONFIG__) {
-                if (window.__PEACH_CONFIG__.isSiteException === true || window.__PEACH_CONFIG__.shieldActive === false) {
-                    return;
-                }
+    try {
+        if (window.PeachNativeBridge && typeof window.PeachNativeBridge.isShieldActive === 'function') {
+            if (!window.PeachNativeBridge.isShieldActive(currentHost)) {
+                return;
             }
-        } catch (e) { }
-
-        window.__PEACH_SHIELD_ACTIVE__ = true;
-
-    const COSMETIC_STYLES = `
-        ins.adsbygoogle,
-            [id ^= "google_ads_iframe"],
-            [id ^= "div-gpt-ad"],
-            iframe[src *= "doubleclick.net"],
-            iframe[src *= "googlesyndication.com"],
-            iframe[src *= "googleadservices.com"],
-        .trc_related_container,
-        .OUTBRAIN,
-            [data - widget - type="taboola"],
-            [id ^= "taboola-"],
-            ytd - ad - slot - renderer,
-            ytd -in -feed - ad - layout - renderer,
-            ytd - action - companion - ad - renderer,
-            ytd - promoted - sparkles - web - renderer,
-            ytd - display - ad - renderer,
-            ytd - promoted - video - renderer,
-            ytd - compact - promoted - video - renderer,
-            ytd - banner - promo - renderer,
-            ytd - statement - banner - renderer,
-            ytd - mealbar - promo - renderer,
-            ytmusic - mealbar - promo - renderer,
-            #masthead - ad,
-            #player - ads,
-        .ytp - ad - overlay - container,
-        .ytp - ad - overlay - slot,
-            ytd - enforcement - message - view - model {
-            display: none!important;
+        } else if (window.__PEACH_CONFIG__) {
+            if (window.__PEACH_CONFIG__.isSiteException === true || window.__PEACH_CONFIG__.shieldActive === false) {
+                return;
+            }
         }
-        `;
+    } catch (e) {}
+
+    window.__PEACH_SHIELD_ACTIVE__ = true;
+
+    const COSMETIC_STYLES = [
+        'ins.adsbygoogle',
+        '[id^="google_ads_iframe"]',
+        '[id^="div-gpt-ad"]',
+        'iframe[src*="doubleclick.net"]',
+        'iframe[src*="googlesyndication.com"]',
+        'iframe[src*="googleadservices.com"]',
+        '.trc_related_container',
+        '.OUTBRAIN',
+        '[data-widget-type="taboola"]',
+        '[id^="taboola-"]',
+        'ytd-ad-slot-renderer',
+        'ytd-in-feed-ad-layout-renderer',
+        'ytd-action-companion-ad-renderer',
+        'ytd-promoted-sparkles-web-renderer',
+        'ytd-display-ad-renderer',
+        'ytd-promoted-video-renderer',
+        'ytd-compact-promoted-video-renderer',
+        'ytd-banner-promo-renderer',
+        'ytd-statement-banner-renderer',
+        'ytd-mealbar-promo-renderer',
+        'ytmusic-mealbar-promo-renderer',
+        '#masthead-ad',
+        '#player-ads',
+        '.ytp-ad-overlay-container',
+        '.ytp-ad-overlay-slot',
+        'ytd-enforcement-message-view-model'
+    ].join(',\n') + ' {\n    display: none !important;\n}';
 
     function injectCosmeticCSS() {
         try {

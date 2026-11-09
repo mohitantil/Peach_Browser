@@ -19,10 +19,12 @@ actual fun stopPlatformMediaService() {
     try {
         AndroidContextHolder.context?.let { ctx ->
             val intent = android.content.Intent().apply {
-                component = android.content.ComponentName(ctx, "com.example.peachbrowser.service.PeachMediaService")
-                action = "com.example.peachbrowser.action.STOP_BG_PLAY"
+                component = android.content.ComponentName(
+                    ctx,
+                    "com.example.peachbrowser.service.PeachMediaService"
+                )
             }
-            ctx.startService(intent)
+            ctx.stopService(intent)
         }
     } catch (e: Exception) {
         e.printStackTrace()

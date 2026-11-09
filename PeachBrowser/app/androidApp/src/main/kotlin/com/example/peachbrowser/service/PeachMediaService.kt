@@ -32,9 +32,9 @@ class PeachMediaService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isServiceRunning = true
         createNotificationChannel()
         initMediaSession()
-        startForegroundPlayback()
     }
 
     private fun initMediaSession() {
@@ -182,6 +182,7 @@ class PeachMediaService : Service() {
     }
 
     private fun stopPlaybackService() {
+        isServiceRunning = false
         releaseLocks()
         try {
             mediaSession?.isActive = false
@@ -356,8 +357,10 @@ class PeachMediaService : Service() {
     }
 
     override fun onDestroy() {
+        isServiceRunning = false
         releaseLocks()
         try {
+            mediaSession?.isActive = false
             mediaSession?.release()
             mediaSession = null
         } catch (_: Exception) {}
@@ -378,6 +381,9 @@ class PeachMediaService : Service() {
         const val EXTRA_ARTIST = "extra_artist"
         const val EXTRA_IS_PLAYING = "extra_is_playing"
 
+        @Volatile
+        var isServiceRunning: Boolean = false
+
         fun startOrUpdate(
             context: Context,
             title: String = "Peach Browser",
@@ -385,6 +391,7 @@ class PeachMediaService : Service() {
             isPlaying: Boolean = true
         ) {
             try {
+                isServiceRunning = true
                 val intent = Intent(context, PeachMediaService::class.java).apply {
                     action = ACTION_START
                     putExtra(EXTRA_TITLE, title)
@@ -402,11 +409,10 @@ class PeachMediaService : Service() {
         }
 
         fun stop(context: Context) {
+            if (!isServiceRunning) return
             try {
-                val intent = Intent(context, PeachMediaService::class.java).apply {
-                    action = ACTION_STOP
-                }
-                context.startService(intent)
+                isServiceRunning = false
+                context.stopService(Intent(context, PeachMediaService::class.java))
             } catch (e: Exception) {
                 e.printStackTrace()
             }

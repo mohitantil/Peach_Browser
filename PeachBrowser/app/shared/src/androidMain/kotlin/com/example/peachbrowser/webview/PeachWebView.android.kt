@@ -1032,8 +1032,67 @@ actual fun PeachWebView(
                                 } catch (_: Exception) {}
                             }
 
+                            val rootLayout = android.widget.LinearLayout(act).apply {
+                                orientation = android.widget.LinearLayout.VERTICAL
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            }
+
+                            val headerBar = android.widget.LinearLayout(act).apply {
+                                orientation = android.widget.LinearLayout.HORIZONTAL
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                setBackgroundColor(android.graphics.Color.parseColor("#F5F3F9"))
+                                val padH = (16 * act.resources.displayMetrics.density).toInt()
+                                val padV = (10 * act.resources.displayMetrics.density).toInt()
+                                setPadding(padH, padV, padH, padV)
+                            }
+
+                            val titleView = android.widget.TextView(act).apply {
+                                text = "Secure Sign-In"
+                                textSize = 14f
+                                setTextColor(android.graphics.Color.parseColor("#1E1E2E"))
+                                maxLines = 1
+                                ellipsize = android.text.TextUtils.TruncateAt.END
+                                layoutParams = android.widget.LinearLayout.LayoutParams(
+                                    0,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    1f
+                                )
+                            }
+
+                            val closeBtn = android.widget.TextView(act).apply {
+                                text = "✕"
+                                textSize = 18f
+                                setTextColor(android.graphics.Color.parseColor("#5E35B1"))
+                                val pad = (6 * act.resources.displayMetrics.density).toInt()
+                                setPadding(pad, 0, pad, 0)
+                                setOnClickListener {
+                                    (view as? PeachNativeWebView)?.dismissOAuthPopupIfShowing()
+                                }
+                            }
+
+                            headerBar.addView(titleView)
+                            headerBar.addView(closeBtn)
+                            rootLayout.addView(
+                                headerBar,
+                                android.widget.LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                )
+                            )
+                            rootLayout.addView(
+                                popupWebView,
+                                android.widget.LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    0,
+                                    1f
+                                )
+                            )
+
                             val dialog = Dialog(act, android.R.style.Theme_DeviceDefault_Light_NoActionBar).apply {
-                                setContentView(popupWebView)
+                                setContentView(rootLayout)
                                 setCancelable(true)
                                 window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                                 setOnDismissListener {

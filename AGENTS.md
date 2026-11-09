@@ -278,4 +278,10 @@
     - Fixed media notification respawn loop in `MainActivity.kt` with `wasMediaSessionActive` flag, ensuring foreground playback only starts when `isPlaying == true`.
     - Throttled `DownloadsScreen.kt` polling with `hasActiveDownload` guard, stopping idle timer iterations when all downloads are completed.
     - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 1m 3s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 47s`).
+  - Final Production Verification & Polish Audit (`v5.1.1`):
+    - Fixed auto-formatter CSS selector corruption in `privacy_shield.bundle.js` using strict string array join.
+    - Implemented safe service teardown in `PeachMediaService.kt` and `PlatformSession.android.kt` using `stopService` and `isServiceRunning` tracking.
+    - Updated `MainActivity.kt` `ensureBackgroundMediaServiceState` to only spawn notification when media is actively playing (`state.isAudioPlaying || PeachMediaService.isServiceRunning`).
+    - Added user-dismissible "Secure Sign-In" header bar with `✕` close button to OAuth popup dialog in `PeachWebView.android.kt`.
+    - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 1m 18s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 9s`).
 
