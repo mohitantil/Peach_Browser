@@ -238,10 +238,14 @@ class BrowserViewModel(
                     if (isHttp || (!isLocalOrScheme && !url.startsWith("about:"))) {
                         val host = normalizeDomain(url)
                         val isException = _state.value.siteExceptions.any { host == it || host.endsWith(".$it") }
-                        if (_state.value.isDeAmpEnabled && !isException) {
+                        val siteOverride = _state.value.siteShieldOverrides.entries.find {
+                            host == it.key || host.endsWith(".${it.key}")
+                        }?.value
+                        val shieldsUpForSite = !isException && (siteOverride?.shieldsUp ?: _state.value.isAdBlockEnabled)
+                        if (_state.value.isDeAmpEnabled && shieldsUpForSite) {
                             url = UrlSanitizer.deAmp(url)
                         }
-                        if (_state.value.isTrackingProtectionEnabled && !isException) {
+                        if (_state.value.isTrackingProtectionEnabled && shieldsUpForSite) {
                             url = UrlSanitizer.stripTrackingParams(url)
                         }
                     }
@@ -319,10 +323,15 @@ class BrowserViewModel(
             }
             is BrowserIntent.GoHome -> {
                 releaseTabWebView(_state.value.activeTabId)
+                stopPlatformMediaService()
                 updateCurrentTab { tab ->
                     tab.copy(url = "", title = "New Tab", canGoBack = false, canGoForward = false)
                 }
-                _state.value = _state.value.copy(activePageTitle = "New Tab")
+                _state.value = _state.value.copy(
+                    activePageTitle = "New Tab",
+                    isAudioPlaying = false,
+                    mediaMetadata = com.example.peachbrowser.presentation.mvi.MediaMetadataState()
+                )
             }
             is BrowserIntent.ResetToCleanSession -> {
                 resetToCleanSession()
@@ -381,6 +390,13 @@ class BrowserViewModel(
             }
             is BrowserIntent.CloseTab -> {
                 releaseTabWebView(intent.tabId)
+                if (_state.value.activeTabId == intent.tabId) {
+                    stopPlatformMediaService()
+                    _state.value = _state.value.copy(
+                        isAudioPlaying = false,
+                        mediaMetadata = com.example.peachbrowser.presentation.mvi.MediaMetadataState()
+                    )
+                }
                 val remainingTabs = _state.value.tabs.filter { it.id != intent.tabId }
                 val remainingBackStack = _state.value.tabBackStack.filter { it != intent.tabId }
 
@@ -618,19 +634,27 @@ class BrowserViewModel(
             }
             is BrowserIntent.SetAudioPlaying -> {
                 if (_state.value.isAudioPlaying != intent.isPlaying) {
-                    _state.value = _state.value.copy(isAudioPlaying = intent.isPlaying)
+                    _state.value = _state.value.copy(
+                        isAudioPlaying = intent.isPlaying,
+                        mediaMetadata = _state.value.mediaMetadata.copy(isPlaying = intent.isPlaying)
+                    )
                 }
             }
             is BrowserIntent.UpdateMediaMetadata -> {
-                _state.value = _state.value.copy(
-                    mediaMetadata = com.example.peachbrowser.presentation.mvi.MediaMetadataState(
-                        title = intent.title,
-                        artist = intent.artist,
-                        artworkUrl = intent.artworkUrl,
-                        isPlaying = intent.isPlaying
-                    ),
-                    isAudioPlaying = intent.isPlaying
+                val cleanTitle = intent.title.ifBlank { _state.value.activePageTitle.ifBlank { "Peach Browser" } }
+                val cleanArtist = intent.artist.ifBlank { normalizeDomain(_state.value.currentUrl) }
+                val updatedMeta = com.example.peachbrowser.presentation.mvi.MediaMetadataState(
+                    title = cleanTitle,
+                    artist = cleanArtist,
+                    artworkUrl = intent.artworkUrl,
+                    isPlaying = intent.isPlaying
                 )
+                if (_state.value.mediaMetadata != updatedMeta || _state.value.isAudioPlaying != intent.isPlaying) {
+                    _state.value = _state.value.copy(
+                        mediaMetadata = updatedMeta,
+                        isAudioPlaying = intent.isPlaying
+                    )
+                }
             }
             is BrowserIntent.StartSleepTimer -> {
                 startSleepTimer(intent.durationMinutes, intent.action)

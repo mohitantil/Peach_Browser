@@ -2,17 +2,25 @@ package com.example.peachbrowser.webview
 
 import android.Manifest
 import android.app.Activity
+import android.app.Dialog
 import android.app.DownloadManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Environment
 import android.os.Message
+import android.util.Base64
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.MimeTypeMap
 import android.webkit.PermissionRequest
 import android.webkit.URLUtil
 import android.webkit.WebChromeClient
@@ -21,13 +29,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.webkit.MimeTypeMap
 import android.widget.FrameLayout
 import android.widget.Toast
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.media.MediaScannerConnection
-import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -45,16 +48,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import java.io.File
-import java.io.FileOutputStream
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.webkit.ServiceWorkerClientCompat
-import androidx.webkit.ServiceWorkerControllerCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -67,6 +66,14 @@ import com.example.peachbrowser.util.UrlSanitizer
 import com.example.peachbrowser.util.clearBrowserSession
 import org.koin.compose.koinInject
 import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.FileOutputStream
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 object AdBlocker {
     val ESSENTIAL_STATIC_AND_SPA_DOMAINS = setOf(
@@ -84,6 +91,7 @@ object AdBlocker {
         "aliyun.com",
         "chatgpt.com",
         "openai.com",
+        "auth.openai.com",
         "claude.ai",
         "anthropic.com",
         "deepseek.com",
@@ -94,6 +102,14 @@ object AdBlocker {
         "chat.z.ai",
         "gemini.google.com",
         "aistudio.google.com",
+        "accounts.google.com",
+        "appleid.apple.com",
+        "login.microsoftonline.com",
+        "login.live.com",
+        "github.com",
+        "auth0.com",
+        "clerk.com",
+        "clerk.accounts.dev",
         "music.youtube.com",
         "youtube.com",
         "youtu.be"
@@ -135,8 +151,6 @@ object AdBlocker {
     @Volatile
     var currentMainFrameHost: String = ""
 
-    private var serviceWorkerHooked = false
-
     fun isDomainMatching(host: String, domainSet: Set<String>): Boolean {
         if (host.isBlank()) return false
         val clean = host.trim().lowercase()
@@ -168,69 +182,17 @@ object AdBlocker {
         return WebResourceResponse(
             "text/plain",
             "UTF-8",
-            200,
-            "OK",
+            204,
+            "No Content",
             headers,
             ByteArrayInputStream(ByteArray(0))
         )
     }
-
-    @Synchronized
-    fun ensureServiceWorkerHooked() {
-        if (serviceWorkerHooked) return
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
-            try {
-                val swController = ServiceWorkerControllerCompat.getInstance()
-                swController.serviceWorkerWebSettings.allowContentAccess = false
-                swController.serviceWorkerWebSettings.allowFileAccess = false
-                swController.setServiceWorkerClient(object : ServiceWorkerClientCompat() {
-                    override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
-                        if (request.isForMainFrame) return null
-                        val reqUri = request.url ?: return null
-                        val reqHost = (reqUri.host ?: "").lowercase()
-                        val refererHost = try {
-                            Uri.parse(request.requestHeaders?.get("Referer") ?: "").host?.lowercase() ?: ""
-                        } catch (e: Exception) { "" }
-                        if (isDomainMatching(reqHost, globalSiteExceptions) ||
-                            isDomainMatching(reqHost, ESSENTIAL_STATIC_AND_SPA_DOMAINS) ||
-                            (refererHost.isNotBlank() && (isDomainMatching(refererHost, globalSiteExceptions) || isDomainMatching(refererHost, ESSENTIAL_STATIC_AND_SPA_DOMAINS))) ||
-                            (currentMainFrameHost.isNotBlank() && (isDomainMatching(currentMainFrameHost, globalSiteExceptions) || isDomainMatching(currentMainFrameHost, ESSENTIAL_STATIC_AND_SPA_DOMAINS)))
-                        ) {
-                            return null
-                        }
-                        if (globalShieldEnabled && isAdRequest(reqUri)) {
-                            return createEmptyResponse()
-                        }
-                        return null
-                    }
-                })
-                serviceWorkerHooked = true
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
 }
 
-private fun loadMediaDetectorScript(context: Context): String {
+private fun loadAssetScript(context: Context, fileName: String): String {
     return try {
-        context.assets.open("media_detector.bundle.js").bufferedReader().use { it.readText() }
-    } catch (e: Exception) {
-        ""
-    }
-}
-
-private fun loadFarblingScript(context: Context): String {
-    return try {
-        context.assets.open("farbling.bundle.js").bufferedReader().use { it.readText() }
-    } catch (e: Exception) {
-        ""
-    }
-}
-
-private fun loadBackgroundScript(context: Context): String {
-    return try {
-        context.assets.open("background_playback.bundle.js").bufferedReader().use { it.readText() }
+        context.assets.open(fileName).bufferedReader().use { it.readText() }
     } catch (e: Exception) {
         ""
     }
@@ -246,6 +208,10 @@ private fun enqueuePeachDownload(
 ) {
     try {
         val now = com.example.peachbrowser.currentTimeMillis()
+        if (downloadUrl.startsWith("blob:")) {
+            Toast.makeText(ctx, "Blob stream download handled by page", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (downloadUrl.startsWith("data:")) {
             val commaIndex = downloadUrl.indexOf(',')
             if (commaIndex != -1) {
@@ -339,7 +305,7 @@ private fun enqueuePeachDownload(
 }
 
 class PeachNativeWebView(context: Context) : WebView(context) {
-    @Volatile var isBackgroundPlayActive: Boolean = false
+    @Volatile var isBackgroundPlayActive: Boolean = true
     @Volatile var isShieldEnabled: Boolean = true
     @Volatile var isFarblingEnabled: Boolean = true
     @Volatile var isTrackingProtectionEnabled: Boolean = true
@@ -348,10 +314,13 @@ class PeachNativeWebView(context: Context) : WebView(context) {
     @Volatile var siteExceptions: Set<String> = emptySet()
     @Volatile var currentMainFrameHost: String = ""
     @Volatile var appliedReloadTrigger: Int = 0
+    @Volatile var cachedCanGoBackSmartly: Boolean = false
 
     var customView: View? = null
     var customViewCallback: WebChromeClient.CustomViewCallback? = null
     var customViewContainer: FrameLayout? = null
+    var currentOAuthDialog: Dialog? = null
+    var currentOAuthWebView: WebView? = null
     var originalOrientation: Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     var onFullscreenChanged: ((Boolean) -> Unit)? = null
     var onPermissionRequestHandler: ((PermissionRequest) -> Unit)? = null
@@ -363,25 +332,8 @@ class PeachNativeWebView(context: Context) : WebView(context) {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
-    }
-
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val wMode = MeasureSpec.getMode(widthMeasureSpec)
-        val hMode = MeasureSpec.getMode(heightMeasureSpec)
-        val wSize = MeasureSpec.getSize(widthMeasureSpec)
-        val hSize = MeasureSpec.getSize(heightMeasureSpec)
-
-        val fixedWidthSpec = if (wMode == MeasureSpec.UNSPECIFIED && wSize > 0) {
-            MeasureSpec.makeMeasureSpec(wSize, MeasureSpec.EXACTLY)
-        } else {
-            widthMeasureSpec
-        }
-        val fixedHeightSpec = if (hMode == MeasureSpec.UNSPECIFIED && hSize > 0) {
-            MeasureSpec.makeMeasureSpec(hSize, MeasureSpec.EXACTLY)
-        } else {
-            heightMeasureSpec
-        }
-        super.onMeasure(fixedWidthSpec, fixedHeightSpec)
+        isFocusable = true
+        isFocusableInTouchMode = true
     }
 
     private fun normalizeHost(raw: String): String {
@@ -407,12 +359,21 @@ class PeachNativeWebView(context: Context) : WebView(context) {
 
     fun isShieldActiveForHost(host: String): Boolean {
         if (isSiteException(host)) return false
-        val cleanHost = normalizeHost(host).ifBlank { normalizeHost(currentMainFrameHost) }
-        val override = siteShieldOverrides.entries.find {
-            cleanHost == it.key || cleanHost.endsWith(".${it.key}")
-        }?.value
-        return if (override != null) {
-            override.shieldsUp && override.blockTrackersAndAds
+        // Always check top-level main frame override first so cross-origin auth/CAPTCHA iframes
+        // inherit the parent site's Shield OFF state.
+        val mainHost = normalizeHost(currentMainFrameHost)
+        val mainOverride = if (mainHost.isNotBlank()) {
+            siteShieldOverrides.entries.find { mainHost == it.key || mainHost.endsWith(".${it.key}") }?.value
+        } else null
+        if (mainOverride != null) {
+            return mainOverride.shieldsUp && mainOverride.blockTrackersAndAds
+        }
+        val cleanHost = normalizeHost(host)
+        val hostOverride = if (cleanHost.isNotBlank()) {
+            siteShieldOverrides.entries.find { cleanHost == it.key || cleanHost.endsWith(".${it.key}") }?.value
+        } else null
+        return if (hostOverride != null) {
+            hostOverride.shieldsUp && hostOverride.blockTrackersAndAds
         } else {
             isShieldEnabled
         }
@@ -420,12 +381,19 @@ class PeachNativeWebView(context: Context) : WebView(context) {
 
     fun isFarblingActiveForHost(host: String): Boolean {
         if (isSiteException(host)) return false
-        val cleanHost = normalizeHost(host).ifBlank { normalizeHost(currentMainFrameHost) }
-        val override = siteShieldOverrides.entries.find {
-            cleanHost == it.key || cleanHost.endsWith(".${it.key}")
-        }?.value
-        return if (override != null) {
-            override.shieldsUp && override.blockFingerprinting
+        val mainHost = normalizeHost(currentMainFrameHost)
+        val mainOverride = if (mainHost.isNotBlank()) {
+            siteShieldOverrides.entries.find { mainHost == it.key || mainHost.endsWith(".${it.key}") }?.value
+        } else null
+        if (mainOverride != null) {
+            return mainOverride.shieldsUp && mainOverride.blockFingerprinting
+        }
+        val cleanHost = normalizeHost(host)
+        val hostOverride = if (cleanHost.isNotBlank()) {
+            siteShieldOverrides.entries.find { cleanHost == it.key || cleanHost.endsWith(".${it.key}") }?.value
+        } else null
+        return if (hostOverride != null) {
+            hostOverride.shieldsUp && hostOverride.blockFingerprinting
         } else {
             isFarblingEnabled
         }
@@ -433,7 +401,7 @@ class PeachNativeWebView(context: Context) : WebView(context) {
 
     fun hideCustomViewIfShowing() {
         val cv = customView ?: return
-        val act = context as? Activity
+        val act = context.findActivity()
         val decorView = act?.window?.decorView as? ViewGroup
 
         customViewContainer?.let { container ->
@@ -455,13 +423,16 @@ class PeachNativeWebView(context: Context) : WebView(context) {
         onFullscreenChanged?.invoke(false)
     }
 
-    var currentOAuthDialog: android.app.Dialog? = null
-
     fun dismissOAuthPopupIfShowing() {
         try {
             currentOAuthDialog?.dismiss()
-            currentOAuthDialog = null
         } catch (_: Exception) {}
+        try {
+            currentOAuthWebView?.stopLoading()
+            currentOAuthWebView?.destroy()
+        } catch (_: Exception) {}
+        currentOAuthDialog = null
+        currentOAuthWebView = null
     }
 
     private fun isSamePageOrRedirect(url1: String, url2: String): Boolean {
@@ -475,36 +446,36 @@ class PeachNativeWebView(context: Context) : WebView(context) {
         val noHash2 = clean2.substringBefore("#")
         val query1 = noHash1.substringAfter("?", "")
         val query2 = noHash2.substringAfter("?", "")
-        if (query1 != query2) {
-            return false
-        }
+        if (query1 != query2) return false
 
         val base1 = noHash1.substringBefore("?")
         val base2 = noHash2.substringBefore("?")
-        if (base1 != base2) {
-            if (base1.removePrefix("m.").removePrefix("www.") == base2.removePrefix("m.").removePrefix("www.")) {
-                return true
-            }
-            return false
-        }
-        return true
+        return base1.removePrefix("m.").removePrefix("www.") == base2.removePrefix("m.").removePrefix("www.")
     }
 
     fun canGoBackSmartly(): Boolean {
-        if (!canGoBack()) return false
+        if (!canGoBack()) {
+            cachedCanGoBackSmartly = false
+            return false
+        }
         val list = copyBackForwardList()
         val currIndex = list.currentIndex
-        if (currIndex <= 0) return false
+        if (currIndex <= 0) {
+            cachedCanGoBackSmartly = false
+            return false
+        }
 
         val currUrl = list.getItemAtIndex(currIndex)?.url ?: ""
         var targetIndex = currIndex - 1
         while (targetIndex >= 0) {
             val targetUrl = list.getItemAtIndex(targetIndex)?.url ?: ""
             if (!isSamePageOrRedirect(currUrl, targetUrl)) {
+                cachedCanGoBackSmartly = true
                 return true
             }
             targetIndex--
         }
+        cachedCanGoBackSmartly = false
         return false
     }
 
@@ -557,16 +528,12 @@ class PeachNativeWebView(context: Context) : WebView(context) {
     }
 
     override fun onPause() {
-        if (isBackgroundPlayActive) {
-            return
-        }
+        if (isBackgroundPlayActive) return
         super.onPause()
     }
 
     override fun pauseTimers() {
-        if (isBackgroundPlayActive) {
-            return
-        }
+        if (isBackgroundPlayActive) return
         super.pauseTimers()
     }
 }
@@ -582,22 +549,16 @@ actual fun PeachWebView(
     val browserState by browserViewModel.state.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = context.findActivity()
 
-    val backgroundScript = remember(context) { loadBackgroundScript(context) }
-    val farblingScript = remember(context) { loadFarblingScript(context) }
-    val mediaDetectorScript = remember(context) { loadMediaDetectorScript(context) }
-    val shieldScript = remember(context) {
-        try {
-            context.assets.open("privacy_shield.bundle.js").bufferedReader().use { it.readText() }
-        } catch (e: Exception) {
-            ""
-        }
-    }
+    val backgroundScript = remember(context) { loadAssetScript(context, "background_playback.bundle.js") }
+    val farblingScript = remember(context) { loadAssetScript(context, "farbling.bundle.js") }
+    val mediaDetectorScript = remember(context) { loadAssetScript(context, "media_detector.bundle.js") }
+    val shieldScript = remember(context) { loadAssetScript(context, "privacy_shield.bundle.js") }
+
     var lastLoadedUrl by remember(tabId) { mutableStateOf<String?>(null) }
     var longPressedImageUrl by remember { mutableStateOf<String?>(null) }
     val audioFocusManager = koinInject<com.example.peachbrowser.util.PeachAudioFocusManager>()
-
     var pendingPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -666,11 +627,10 @@ actual fun PeachWebView(
     }
 
     AndroidView(
-        modifier = modifier,
+        modifier = modifier.fillMaxSize(),
         factory = { ctx ->
             AdBlocker.globalShieldEnabled = browserState.isAdBlockEnabled
             AdBlocker.globalSiteExceptions = browserState.siteExceptions
-            AdBlocker.ensureServiceWorkerHooked()
 
             AndroidTabWebViewPool.getOrCreate(tabId, ctx) { c ->
                 PeachNativeWebView(c).apply {
@@ -714,17 +674,23 @@ actual fun PeachWebView(
                         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                         setSupportMultipleWindows(true)
                         javaScriptCanOpenWindowsAutomatically = true
-                        allowFileAccess = true
+                        allowFileAccess = false
                         allowContentAccess = true
                         mediaPlaybackRequiresUserGesture = false
                         useWideViewPort = true
                         loadWithOverviewMode = true
+                        setSupportZoom(true)
+                        builtInZoomControls = true
+                        displayZoomControls = false
+                        textZoom = 100
+                        layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
                         val defaultUa = userAgentString ?: ""
                         userAgentString = defaultUa
                             .replace("; wv)", ")")
                             .replace("; wv;", ";")
                             .replace("; wv", "")
                             .replace(Regex("Version/\\d+\\.\\d+\\s?"), "")
+                            .trim()
                     }
 
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
@@ -748,9 +714,7 @@ actual fun PeachWebView(
                             view: WebView?,
                             request: WebResourceRequest?
                         ): WebResourceResponse? {
-                            if (request == null) {
-                                return null
-                            }
+                            if (request == null) return null
                             val reqUri = request.url ?: return super.shouldInterceptRequest(view, request)
                             val reqHost = (reqUri.host ?: "").lowercase()
                             val nativeView = view as? PeachNativeWebView
@@ -848,6 +812,10 @@ actual fun PeachWebView(
 
                         override fun onPageFinished(view: WebView?, pageUrl: String?) {
                             super.onPageFinished(view, pageUrl)
+                            try {
+                                CookieManager.getInstance().flush()
+                            } catch (_: Exception) {}
+
                             val canBack = if (view is PeachNativeWebView) view.canGoBackSmartly() else (view?.canGoBack() == true)
                             controller?.isLoading = false
                             controller?.canGoBack = canBack
@@ -869,24 +837,8 @@ actual fun PeachWebView(
                                 )
                             )
 
-                            if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                                val currentHost = try { Uri.parse(pageUrl ?: "").host ?: "" } catch (e: Exception) { "" }
-                                if (isShieldActiveForHost(currentHost) && shieldScript.isNotBlank()) {
-                                    view?.evaluateJavascript(shieldScript, null)
-                                }
-                                if (isFarblingActiveForHost(currentHost) && farblingScript.isNotBlank()) {
-                                    view?.evaluateJavascript(farblingScript, null)
-                                }
-                                if (isBackgroundPlayActive && backgroundScript.isNotBlank()) {
-                                    view?.evaluateJavascript(backgroundScript, null)
-                                }
-                                if (mediaDetectorScript.isNotBlank()) {
-                                    view?.evaluateJavascript(mediaDetectorScript, null)
-                                }
-                            }
-
                             view?.evaluateJavascript(
-                                "(function() { return (document.title || '') + '\\n\\n' + (document.body ? (document.body.textContent || '').substring(0, 3000) : ''); })();"
+                                "(function() { return (document.title || '') + '\\n\\n' + (document.body ? (document.body.textContent || '').replace(/\\s+/g, ' ').trim().substring(0, 2000) : ''); })();"
                             ) { rawResult ->
                                 if (!rawResult.isNullOrBlank() && rawResult != "null") {
                                     val cleanText = rawResult.trim('\"')
@@ -899,26 +851,51 @@ actual fun PeachWebView(
                             }
                         }
 
+                        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                            super.doUpdateVisitedHistory(view, url, isReload)
+                            val canBack = if (view is PeachNativeWebView) view.canGoBackSmartly() else (view?.canGoBack() == true)
+                            controller?.canGoBack = canBack
+                            controller?.canGoForward = view?.canGoForward() == true
+                            if (!url.isNullOrBlank()) {
+                                controller?.currentUrl = url
+                                browserViewModel.processIntent(
+                                    BrowserIntent.UpdateTabNavState(
+                                        tabId = tabId,
+                                        canGoBack = canBack,
+                                        canGoForward = view?.canGoForward() == true,
+                                        url = url,
+                                        title = view?.title ?: ""
+                                    )
+                                )
+                            }
+                        }
+
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                             val reqUrl = request?.url?.toString() ?: return false
-                            return handleUrlLoading(view, reqUrl)
+                            if (!request.isForMainFrame) return false
+                            return handleUrlLoading(view, reqUrl, isRedirect = request.isRedirect)
                         }
 
                         @Deprecated("Deprecated in Java")
                         override fun shouldOverrideUrlLoading(view: WebView?, reqUrl: String?): Boolean {
                             if (reqUrl.isNullOrBlank()) return false
-                            return handleUrlLoading(view, reqUrl)
+                            return handleUrlLoading(view, reqUrl, isRedirect = false)
                         }
 
-                        private fun handleUrlLoading(view: WebView?, reqUrl: String): Boolean {
+                        private fun handleUrlLoading(view: WebView?, reqUrl: String, isRedirect: Boolean): Boolean {
                             if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
-                                var targetUrl = reqUrl
+                                if (isRedirect || UrlSanitizer.isAuthOrOAuthUrl(reqUrl)) {
+                                    return false
+                                }
                                 val host = try { Uri.parse(reqUrl).host ?: "" } catch (e: Exception) { "" }
-                                val isException = isSiteException(host)
-                                if (isDeAmpEnabled && !isException) {
+                                if (!isShieldActiveForHost(host)) {
+                                    return false
+                                }
+                                var targetUrl = reqUrl
+                                if (isDeAmpEnabled) {
                                     targetUrl = UrlSanitizer.deAmp(targetUrl)
                                 }
-                                if (isTrackingProtectionEnabled && !isException) {
+                                if (isTrackingProtectionEnabled) {
                                     targetUrl = UrlSanitizer.stripTrackingParams(targetUrl)
                                 }
                                 if (targetUrl != reqUrl) {
@@ -928,12 +905,16 @@ actual fun PeachWebView(
                                 return false
                             } else if (reqUrl.startsWith("file://", ignoreCase = true) ||
                                 reqUrl.startsWith("content://", ignoreCase = true) ||
-                                reqUrl.startsWith("about:", ignoreCase = true)
+                                reqUrl.startsWith("about:", ignoreCase = true) ||
+                                reqUrl.startsWith("javascript:", ignoreCase = true) ||
+                                reqUrl.startsWith("blob:", ignoreCase = true)
                             ) {
                                 return false
                             }
                             try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(reqUrl))
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(reqUrl)).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
                                 view?.context?.startActivity(intent)
                             } catch (e: Exception) {
                                 e.printStackTrace()
@@ -957,7 +938,7 @@ actual fun PeachWebView(
 
                         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                             if (view == null) return
-                            val act = context as? Activity ?: return
+                            val act = context.findActivity() ?: return
                             val decorView = act.window.decorView as? ViewGroup ?: return
 
                             if (customView != null) {
@@ -988,11 +969,11 @@ actual fun PeachWebView(
                             )
 
                             val windowInsetsController = WindowCompat.getInsetsController(act.window, decorView)
-                            windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                            windowInsetsController.systemBarsBehavior =
+                                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                             windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
                             act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-
                             onFullscreenChanged?.invoke(true)
                         }
 
@@ -1024,49 +1005,81 @@ actual fun PeachWebView(
                             resultMsg: Message?
                         ): Boolean {
                             if (resultMsg == null || view == null) return false
-                            val act = (view.context as? android.content.MutableContextWrapper)?.baseContext as? Activity
-                                ?: view.context as? Activity
-                                ?: return false
+                            val act = view.context.findActivity() ?: return false
+                            if (act.isFinishing) return false
 
-                            val popupWebView = WebView(view.context).apply {
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                settings.setSupportMultipleWindows(true)
-                                settings.javaScriptCanOpenWindowsAutomatically = true
-                                settings.userAgentString = view.settings.userAgentString
+                            (view as? PeachNativeWebView)?.dismissOAuthPopupIfShowing()
+
+                            val popupWebView = WebView(act).apply {
                                 layoutParams = ViewGroup.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT
                                 )
+                                settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    databaseEnabled = true
+                                    setSupportMultipleWindows(true)
+                                    javaScriptCanOpenWindowsAutomatically = true
+                                    useWideViewPort = true
+                                    loadWithOverviewMode = true
+                                    userAgentString = view.settings.userAgentString
+                                }
+                                try {
+                                    val cm = CookieManager.getInstance()
+                                    cm.setAcceptCookie(true)
+                                    cm.setAcceptThirdPartyCookies(this, true)
+                                } catch (_: Exception) {}
                             }
 
-                            val dialog = android.app.Dialog(act, android.R.style.Theme_DeviceDefault_Light_NoActionBar_Fullscreen).apply {
+                            val dialog = Dialog(act, android.R.style.Theme_DeviceDefault_Light_NoActionBar).apply {
                                 setContentView(popupWebView)
+                                setCancelable(true)
+                                window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                                 setOnDismissListener {
                                     try {
+                                        CookieManager.getInstance().flush()
+                                    } catch (_: Exception) {}
+                                    try {
+                                        popupWebView.stopLoading()
                                         popupWebView.destroy()
                                     } catch (_: Exception) {}
+                                    (view as? PeachNativeWebView)?.currentOAuthDialog = null
+                                    (view as? PeachNativeWebView)?.currentOAuthWebView = null
                                 }
                             }
+
                             (view as? PeachNativeWebView)?.currentOAuthDialog = dialog
+                            (view as? PeachNativeWebView)?.currentOAuthWebView = popupWebView
 
                             popupWebView.webChromeClient = object : WebChromeClient() {
                                 override fun onCloseWindow(window: WebView?) {
                                     try {
-                                        dialog.dismiss()
-                                        (view as? PeachNativeWebView)?.currentOAuthDialog = null
+                                        CookieManager.getInstance().flush()
                                     } catch (_: Exception) {}
+                                    (view as? PeachNativeWebView)?.dismissOAuthPopupIfShowing()
                                 }
                             }
 
                             popupWebView.webViewClient = object : WebViewClient() {
+                                override fun onPageFinished(v: WebView?, url: String?) {
+                                    super.onPageFinished(v, url)
+                                    try {
+                                        CookieManager.getInstance().flush()
+                                    } catch (_: Exception) {}
+                                }
+
                                 override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
                                     val u = request?.url?.toString() ?: ""
-                                    if (u.startsWith("http://") || u.startsWith("https://")) {
+                                    if (u.startsWith("http://") || u.startsWith("https://") ||
+                                        u.startsWith("about:") || u.startsWith("javascript:") || u.startsWith("blob:")
+                                    ) {
                                         return false
                                     }
                                     return try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(u))
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(u)).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
                                         v?.context?.startActivity(intent)
                                         true
                                     } catch (_: Exception) {
@@ -1080,6 +1093,11 @@ actual fun PeachWebView(
                             transport.webView = popupWebView
                             resultMsg.sendToTarget()
                             return true
+                        }
+
+                        override fun onCloseWindow(window: WebView?) {
+                            super.onCloseWindow(window)
+                            dismissOAuthPopupIfShowing()
                         }
                     }
 
@@ -1142,7 +1160,6 @@ actual fun PeachWebView(
                     controller?.resumeMediaAction = {
                         AndroidTabWebViewPool.resumeActiveMedia()
                     }
-
                     controller?.goBackAction = {
                         if (!goBackSmartly()) {
                             controller.canGoBack = false
@@ -1167,24 +1184,12 @@ actual fun PeachWebView(
                             if (shieldScript.isNotBlank()) {
                                 WebViewCompat.addDocumentStartJavaScript(this, shieldScript, setOf("*"))
                             }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                        try {
                             if (farblingScript.isNotBlank()) {
                                 WebViewCompat.addDocumentStartJavaScript(this, farblingScript, setOf("*"))
                             }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                        try {
                             if (backgroundScript.isNotBlank()) {
                                 WebViewCompat.addDocumentStartJavaScript(this, backgroundScript, setOf("*"))
                             }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                        try {
                             if (mediaDetectorScript.isNotBlank()) {
                                 WebViewCompat.addDocumentStartJavaScript(this, mediaDetectorScript, setOf("*"))
                             }
@@ -1241,23 +1246,16 @@ actual fun PeachWebView(
             webView.siteShieldOverrides = browserState.siteShieldOverrides
             webView.siteExceptions = browserState.siteExceptions
 
-            if (webView.isBackgroundPlayActive) {
-                webView.resumeTimers()
-            }
-
-            val currentHost = try {
-                Uri.parse(webView.url ?: "").host ?: ""
-            } catch (e: Exception) { "" }
+            val currentHost = webView.currentMainFrameHost
             val isException = webView.isSiteException(currentHost)
             val siteConfig = browserState.siteShieldOverrides.entries.find {
                 currentHost == it.key || currentHost.endsWith(".${it.key}")
             }?.value
             val shouldBlockScripts = !isException && (siteConfig?.shieldsUp == true && siteConfig.blockScripts)
-            if (webView.settings.javaScriptEnabled != !shouldBlockScripts) {
-                webView.settings.javaScriptEnabled = !shouldBlockScripts
+            val desiredJsEnabled = !shouldBlockScripts
+            if (webView.settings.javaScriptEnabled != desiredJsEnabled) {
+                webView.settings.javaScriptEnabled = desiredJsEnabled
             }
-            if (!webView.settings.domStorageEnabled) webView.settings.domStorageEnabled = true
-            if (!webView.settings.databaseEnabled) webView.settings.databaseEnabled = true
 
             if (webView.appliedReloadTrigger != browserState.shouldReloadTrigger) {
                 webView.appliedReloadTrigger = browserState.shouldReloadTrigger
@@ -1276,9 +1274,7 @@ actual fun PeachWebView(
                 }
             }
 
-            if (controller?.canGoBack != webView.canGoBack()) {
-                controller?.canGoBack = webView.canGoBackSmartly()
-            }
+            controller?.canGoBack = webView.cachedCanGoBackSmartly
             controller?.canGoForward = webView.canGoForward()
 
             controller?.goBackAction = {
@@ -1419,6 +1415,7 @@ actual fun PeachWebView(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             AndroidTabWebViewPool.get(tabId)?.hideCustomViewIfShowing()
+            AndroidTabWebViewPool.get(tabId)?.dismissOAuthPopupIfShowing()
             try {
                 pendingPermissionRequest?.deny()
             } catch (e: Exception) {

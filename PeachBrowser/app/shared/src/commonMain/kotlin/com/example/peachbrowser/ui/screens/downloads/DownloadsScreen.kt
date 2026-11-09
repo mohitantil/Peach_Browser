@@ -38,17 +38,17 @@ fun DownloadsScreen(
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Split Overview (Both), 1 = Current Session, 2 = Past 30 Days
     var nowMillis by remember { mutableLongStateOf(currentTimeMillis()) }
 
-    // Trigger immediate & periodic real-time storage sync while DownloadsScreen is open
-    LaunchedEffect(Unit) {
+    val hasActiveDownload = remember(sessionDownloads, allTimeDownloads) {
+        sessionDownloads.any { !it.isCompleted && !it.isFailed } ||
+            allTimeDownloads.any { !it.isCompleted && !it.isFailed }
+    }
+
+    LaunchedEffect(hasActiveDownload) {
         onIntent(BrowserIntent.SyncDownloadsWithStorage)
-        while (true) {
-            val hasActive = sessionDownloads.any { !it.isCompleted && !it.isFailed } ||
-                    allTimeDownloads.any { !it.isCompleted && !it.isFailed }
-            delay(if (hasActive) 1000L else 3000L)
+        while (hasActiveDownload) {
+            delay(1200L)
             nowMillis = currentTimeMillis()
-            if (hasActive || sessionDownloads.isNotEmpty() || allTimeDownloads.isNotEmpty()) {
-                onIntent(BrowserIntent.SyncDownloadsWithStorage)
-            }
+            onIntent(BrowserIntent.SyncDownloadsWithStorage)
         }
     }
 

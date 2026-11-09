@@ -269,4 +269,13 @@
     - T5 (Persistent Android MediaSession & Playback Notification Bar): Overhauled `PeachMediaService.kt` with Android `MediaSession` and `Notification.MediaStyle` (Play/Pause, Next, Previous, Stop). Added `POST_NOTIFICATIONS` runtime permission check and real-time media metadata synchronization in `MainActivity.kt`. Extended `media_detector.bundle.js` with `window.__PEACH_MEDIA_CONTROL__`.
     - T6 (Repository Cleanup & Dead Code Removal): Purged 15 duplicate XML and image assets from `androidApp/src/main/assets/composeResources/`. Removed dead template files `Greeting.kt` and `GreetingUtil.kt`. Added `-keepattributes JavascriptInterface` to `proguard-rules.pro`. Added JVM SQLite driver to `:app:shared` for cross-platform unit test reliability.
     - Verified complete Android compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 1m 33s`) and JVM unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 55s`).
+  - Post-Implementation Audit, Regression Remediation & Launch Crash Fix:
+    - Root Cause of Launch Crash: Deletion of `androidApp/src/main/assets/composeResources/` caused `MissingResourceException: Missing resource: composeResources/peachbrowser.app.shared.generated.resources/drawable/peach_hero.jpg` when `LandingPage` rendered `painterResource(Res.drawable.peach_hero)`. Restored runtime compose assets to `androidApp/src/main/assets/composeResources/peachbrowser.app.shared.generated.resources/drawable/`.
+    - Restored `window.PeachNativeBridge` synchronously in `privacy_shield.bundle.js` and `farbling.bundle.js` at `DOCUMENT_START`, resolving the race condition where `window.__PEACH_CONFIG__` was not yet populated before `onPageStarted`.
+    - Added `Context.findActivity()` tailrec unwrapping `MutableContextWrapper` in `PeachWebView.android.kt` fixing fullscreen custom view orientation and decor view mounting.
+    - Added `CookieManager.setAcceptThirdPartyCookies(popupWebView, true)` and cookie flushing in `onCreateWindow` OAuth modal dialog, plus `dismissOAuthPopupIfShowing` on dispose.
+    - Fixed subframe hijacking and auth bypass in `shouldOverrideUrlLoading`, and enforced parent site `currentMainFrameHost` overrides first in `isShieldActiveForHost` and `isFarblingActiveForHost`.
+    - Fixed media notification respawn loop in `MainActivity.kt` with `wasMediaSessionActive` flag, ensuring foreground playback only starts when `isPlaying == true`.
+    - Throttled `DownloadsScreen.kt` polling with `hasActiveDownload` guard, stopping idle timer iterations when all downloads are completed.
+    - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 1m 3s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 47s`).
 

@@ -64,22 +64,35 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun observeMediaStateForPersistentNotification() {
+        var wasMediaSessionActive = false
         lifecycleScope.launch {
             browserViewModel.state
                 .map { Triple(it.isBackgroundPlayEnabled, it.isAudioPlaying, it.mediaMetadata) }
                 .distinctUntilChanged()
                 .collect { (bgEnabled, isPlaying, meta) ->
-                    if (bgEnabled && (isPlaying || meta.title.isNotBlank())) {
-                        if (isPlaying) {
-                            audioFocusManager.requestAudioFocus()
-                        }
+                    if (!bgEnabled) {
+                        wasMediaSessionActive = false
+                        PeachMediaService.stop(this@MainActivity)
+                        return@collect
+                    }
+                    if (isPlaying) {
+                        wasMediaSessionActive = true
+                        audioFocusManager.requestAudioFocus()
                         PeachMediaService.startOrUpdate(
                             context = this@MainActivity,
                             title = meta.title.ifBlank { browserViewModel.state.value.activePageTitle.ifBlank { "Peach Browser" } },
                             artist = meta.artist.ifBlank { browserViewModel.state.value.currentUrl },
-                            isPlaying = isPlaying
+                            isPlaying = true
                         )
-                    } else if (!bgEnabled) {
+                    } else if (wasMediaSessionActive && meta.title.isNotBlank()) {
+                        PeachMediaService.startOrUpdate(
+                            context = this@MainActivity,
+                            title = meta.title.ifBlank { browserViewModel.state.value.activePageTitle.ifBlank { "Peach Browser" } },
+                            artist = meta.artist.ifBlank { browserViewModel.state.value.currentUrl },
+                            isPlaying = false
+                        )
+                    } else if (!isPlaying && meta.title.isBlank()) {
+                        wasMediaSessionActive = false
                         PeachMediaService.stop(this@MainActivity)
                     }
                 }
