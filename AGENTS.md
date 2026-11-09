@@ -299,4 +299,16 @@
       - Guarded `BrowserViewModel.kt:UpdateTabNavState` with state equality checks to eliminate unnecessary recompositions on SPA hash updates.
       - Updated `proguard-rules.pro` with `-keepattributes *Annotation*` and `-keepclasseswithmembers` to preserve `@JavascriptInterface` on bridge objects under R8 minification.
       - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 52s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 41s`).
+  - YouTube In-Stream Video Ad Neutralizer & Mobile Feed Ad Removal Upgrade:
+    - Root Causes Resolved:
+      1. On `m.youtube.com`, feed and recommendation sponsored items use mobile custom tags (`ytm-*`), which were not matched by legacy desktop `ytd-*` selectors.
+      2. YouTube manifests fetched from `/youtubei/v1/player` schedule ad breaks before playback begins, introducing a pre-roll buffering delay ("subtle pause") before DOM ad-skip scripts could react.
+    - Full-Stack Ad Neutralization Engine:
+      - Mobile YouTube Cosmetic CSS: Added all `ytm-` mobile YouTube selectors to `COSMETIC_STYLES` in `privacy_shield.bundle.js` (`androidApp` & `iosApp`): `ytm-promoted-sparkles-web-renderer`, `ytm-promoted-sparkles-text-search-renderer`, `ytm-companion-ad-renderer`, `ytm-single-item-companion-ad-renderer`, `ytm-ad-slot-renderer`, `ytm-in-feed-ad-layout-renderer`, `ytm-promoted-item-renderer`, `ytm-statement-banner-renderer`, `ytm-banner-promo-renderer`, `ytm-mealbar-promo-renderer`, `ytm-paid-content-overlay-renderer`, `[data-ad-id]`, `[data-ad-impressions]`, `.sparkles-light-cta`, `.companion-ad-container`.
+      - Network JSON Layer Interception: Implemented `setupYouTubePayloadInterceptor()` patching `window.fetch` and `XMLHttpRequest.prototype` to intercept `/youtubei/v1/player` and `/youtubei/v1/next`. Strips `adPlacements`, `adSlots`, `playerAds`, and `adBreakHeartbeatParams` so the player never schedules or buffers ad breaks, eliminating pre-roll ads and pre-roll pauses.
+      - Inline Bootstrap Interception: Attached property getters/setters on `window.ytInitialPlayerResponse` and `window.ytInitialData` at `DOCUMENT_START` to sanitize manifests on direct cold video loads.
+      - Recursive Feed Cleaner: Recursively purges ad renderers from `/youtubei/v1/next` responses, eliminating sponsored cards from watch page recommendation feeds.
+      - Real-Time Watchdog & Playback Safety: Added high-frequency watchdog with playback event listeners (`timeupdate`, `playing`, `loadedmetadata`), isolated strictly to video ads (never feed cards), with automatic `playbackRate` reset to 1.0x when ads finish.
+      - Network-Level Request Blocking: Enhanced `AdBlocker.isAdRequest` in `PeachWebView.android.kt` matching `/youtubei/v1/player/ad_break`, `/get_midroll_info`, `/ptracking`, and `adformat` query parameters.
+    - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 13s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 11s`).
 

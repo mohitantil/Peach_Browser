@@ -160,13 +160,22 @@ object AdBlocker {
     fun isAdRequest(url: Uri): Boolean {
         val host = (url.host ?: "").lowercase()
         if (host.isBlank()) return false
-        if (isDomainMatching(host, ESSENTIAL_STATIC_AND_SPA_DOMAINS)) {
-            val path = url.path ?: ""
-            if ((host.endsWith("youtube.com") || host == "youtube.com") &&
-                (path.startsWith("/api/stats/ads") || path.startsWith("/pagead/") || path.startsWith("/ptracking"))
+        val path = (url.path ?: "").lowercase()
+
+        if (host.endsWith("youtube.com") || host == "youtube.com") {
+            if (path.startsWith("/api/stats/ads") ||
+                path.startsWith("/pagead/") ||
+                path.startsWith("/ptracking") ||
+                path.contains("/ad_break") ||
+                path.contains("/ad_") ||
+                path.contains("get_midroll_info") ||
+                url.getQueryParameter("adformat") != null
             ) {
                 return true
             }
+        }
+
+        if (isDomainMatching(host, ESSENTIAL_STATIC_AND_SPA_DOMAINS)) {
             return false
         }
         return isDomainMatching(host, AD_HOSTS)
