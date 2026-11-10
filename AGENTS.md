@@ -319,5 +319,40 @@
       4. Mobile Recommendation CSS Selectors: Added `:has([aria-label*="Sponsored" i])`, `ytm-compact-promoted-item-renderer`, `ytm-compact-promoted-video-renderer`, and `.ytm-badge-and-byline-item-byline:has(.ad-badge)` to cosmetic stylesheet.
       5. False-Positive Path Matching in AdBlocker: Replaced over-broad `path.contains("/ad_")` with explicit `path.contains("/ad_break")` and `url.getQueryParameter("ad_type") != null`, preventing false-positive blocking of YouTube player modules that previously caused playback stalling.
     - Verified compilation (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 11s`), build & physical device installation (`:app:androidApp:installDebug` on `V2246 - 15`, `BUILD SUCCESSFUL in 1m 24s`).
+- **2026-11-10 (v5.1.2 Hardening Pass)**:
+  - Multi-Agent Comprehensive Security, Privacy, Ad-Block & Lifecycle Hardening (`fix-v5.1.2`, tag `v5.1.2`):
+    - [SEC-CRIT-01] Per-Origin Hardware Sensor Authorization & Session-End Revocation:
+      - Intercepted `onPermissionRequest` in `PeachWebView.android.kt` to present a native Material3 `AlertDialog` displaying the requesting host and sensors ("Camera and Microphone") with explicit "Allow for this session" / "Block" choices.
+      - Integrated auto-revocation: volatile memory storage (`SessionPermissionManager`) cleared on tab navigation (`onPageStarted`), tab closure (`TabManager.remove`), app backgrounding (`AppBackgroundTracker.updateBackgroundState(true)`), and process termination.
+    - [SEC-CRIT-02] Safe Browsable External Intent Parsing:
+      - Replaced raw `Uri.parse` intent launching with `Intent.parseUri(url, Intent.URI_INTENT_SCHEME)` enforcing `CATEGORY_BROWSABLE`, clearing `component` and `selector`, verifying `resolveActivity`, and safely loading `browser_fallback_url` if external app is uninstalled.
+    - [SEC-CRIT-03] OAuth Popup Header with Verified Host & TLS Lock Indicator:
+      - Replaced static "Secure Sign-In" popup modal with a dynamic header displaying real domain host and TLS lock/warning icon, synchronized on `onPageStarted`, `onPageFinished`, and `onReceivedTitle`.
+      - Stripped `X-Requested-With` header on popup WebView via `WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())` to prevent Google OAuth 403 blocks.
+    - [SEC-HIGH-01] Cross-Origin Protection for `PeachNativeBridge`:
+      - Guarded `onMediaStateChanged` and `onMediaMetadataUpdated` against empty/blank frames and validated host checks in `isShieldActive`, `isFarblingActive`, and `isSiteException` against `nativeWebView.url`'s top-level host.
+    - [PRIV-HIGH-01] Ephemeral Session Data Shredding:
+      - Enhanced `clearBrowserSession()` to invoke `dummyWv.clearCache(true)`, `dummyWv.clearFormData()`, and purge disk cache directories (`org.chromium.android_webview`, `WebView`).
+      - Broadened `shredSiteData` to clear `www.` subdomains and subpaths.
+    - [PRIV-HIGH-02] Farbler Session Entropy Salt & Uncapped Canvas Proxy:
+      - Generated cryptographically secure session salt in Kotlin per app run, injected as `window.__PEACH_SESSION_SALT__`.
+      - Removed artificial $64\times 64$ canvas size cap (supporting up to $1024\times 1024$), and proxied `HTMLCanvasElement.prototype.toDataURL` using Canvas 2D API for checksum-valid micro-jitter without Deflate corruption.
+    - [PRIV-MED-01] Tracking Parameter Percent-Encoding Bypass Protection:
+      - Added `decodePercent` in `UrlSanitizer.kt` to decode query parameter keys prior to checking blacklist and `utm_` prefixes.
+    - [AD-HIGH-01] XHR JSON Interception Safe Handling:
+      - Extracted `origResponseGetter` and `origResponseTextGetter` descriptors to avoid `InvalidStateError` when accessing `responseText` on `responseType === 'json'`.
+    - [AD-HIGH-02] Video Ad Watchdog Audio Restoration:
+      - Added `video.__peach_muted_for_ad` state tracking in `fastSkipAd` to restore `video.muted = false` as soon as ad playback ends.
+    - [AD-HIGH-03] Main Video Skip Race Condition Prevention:
+      - Restricted `currentTime` skipping strictly to videos with `duration <= 120s`, and removed `loadedmetadata` trigger to prevent transient skips on main video loads.
+    - [ARCH-HIGH-01] Memory Leak Prevention in Tab Pool:
+      - Dynamically unwrapped `(context as? MutableContextWrapper)?.baseContext` in `setDownloadListener` to prevent retaining destroyed `MainActivity` instances across screen rotations.
+    - [ARCH-HIGH-02] Ghost Media Notification Removal:
+      - Added `stopForeground(STOP_FOREGROUND_REMOVE)` and notification cancellation in `PeachMediaService.onDestroy()`.
+    - [ARCH-MED-01] RFC 3986 URL Component Encoding:
+      - Implemented full RFC 3986 query parameter encoding in `SearchEngineUtil.kt` preserving `#`, `&`, and special characters.
+    - Graceful Exit: Replaced `Process.killProcess` with `activity.finishAffinity()`, and removed iOS `exit(0)`.
+    - Skipped SearXNG & AI Chat companion modules per explicit directive.
+    - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 1m 13s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 1m 7s`).
 
 

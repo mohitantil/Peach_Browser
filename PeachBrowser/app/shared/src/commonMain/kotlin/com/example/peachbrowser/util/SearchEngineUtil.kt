@@ -44,8 +44,26 @@ enum class SearchEngine(
     );
 
     fun buildSearchUrl(query: String): String {
-        val encoded = query.trim().replace(" ", "+")
+        val encoded = encodeQueryParam(query.trim())
         return searchUrlTemplate.replace("%s", encoded)
+    }
+
+    private fun encodeQueryParam(s: String): String {
+        val unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
+        val bytes = s.encodeToByteArray()
+        val sb = StringBuilder()
+        for (b in bytes) {
+            val c = b.toInt().toChar()
+            if (c in unreserved) {
+                sb.append(c)
+            } else if (c == ' ') {
+                sb.append('+')
+            } else {
+                val hex = (b.toInt() and 0xFF).toString(16).uppercase()
+                sb.append('%').append(if (hex.length == 1) "0$hex" else hex)
+            }
+        }
+        return sb.toString()
     }
 
     companion object {

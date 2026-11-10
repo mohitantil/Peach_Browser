@@ -23,6 +23,8 @@ import platform.WebKit.WKWebViewConfiguration
 import platform.WebKit.WKWebsiteDataStore
 
 @OptIn(ExperimentalForeignApi::class)
+private val iosSessionEntropySalt = kotlin.random.Random.nextInt(10000, 999999)
+
 @Composable
 actual fun PeachWebView(
     tabId: String,
@@ -77,7 +79,7 @@ actual fun PeachWebView(
                 val farblingJs = NSString.stringWithContentsOfFile(farblingPath, NSUTF8StringEncoding, null)
                 if (farblingJs != null) {
                     val farblingScript = WKUserScript(
-                        source = farblingJs,
+                        source = "window.__PEACH_SESSION_SALT__ = $iosSessionEntropySalt;\n" + farblingJs,
                         injectionTime = WKUserScriptInjectionTime.WKUserScriptInjectionTimeAtDocumentStart,
                         forMainFrameOnly = false
                     )

@@ -153,8 +153,9 @@ object UrlSanitizer {
 
         val allPairs = rawQuery.split('&')
         val keptParams = allPairs.filter { pair ->
-            val key = pair.substringBefore('=').trim().lowercase()
-            key.isNotBlank() && !isTrackingParam(key)
+            val rawKey = pair.substringBefore('=').trim().lowercase()
+            val decodedKey = decodePercent(rawKey).lowercase()
+            rawKey.isNotBlank() && !isTrackingParam(rawKey) && !isTrackingParam(decodedKey)
         }
 
         return when {
@@ -162,6 +163,26 @@ object UrlSanitizer {
             keptParams.isEmpty() -> "$basePath$fragment"
             else -> "$basePath?${keptParams.joinToString("&")}$fragment"
         }
+    }
+
+    private fun decodePercent(input: String): String {
+        val sb = StringBuilder()
+        var i = 0
+        while (i < input.length) {
+            val c = input[i]
+            if (c == '%' && i + 2 < input.length) {
+                val hex = input.substring(i + 1, i + 3)
+                val code = hex.toIntOrNull(16)
+                if (code != null) {
+                    sb.append(code.toChar())
+                    i += 3
+                    continue
+                }
+            }
+            sb.append(c)
+            i++
+        }
+        return sb.toString()
     }
 
     private fun isTrackingParam(param: String): Boolean {

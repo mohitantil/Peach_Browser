@@ -21,7 +21,7 @@ actual fun stopPlatformMediaService() {
 actual fun exitBrowserApp() {
     try {
         clearBrowserSession()
-        platform.posix.exit(0)
+        // On iOS, graceful exit is handled by delegating to OS lifecycle rather than illegal exit(0)
     } catch (e: Exception) {
         e.printStackTrace()
     }

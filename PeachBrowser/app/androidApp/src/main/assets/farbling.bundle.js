@@ -45,7 +45,8 @@
     window.__PEACH_FARBLER_ACTIVE__ = true;
 
     try {
-        let seed = 0;
+        const sessionEntropy = (typeof window.__PEACH_SESSION_SALT__ === 'number') ? window.__PEACH_SESSION_SALT__ : Math.floor(Math.random() * 1000000);
+        let seed = sessionEntropy;
         for (let i = 0; i < currentHost.length; i++) {
             seed = ((seed << 5) - seed) + currentHost.charCodeAt(i);
             seed |= 0;
@@ -63,17 +64,36 @@
                     const imageData = Reflect.apply(target, thisArg, argArray);
                     try {
                         if (imageData && imageData.data && imageData.data.length > 16) {
-                            const canvasW = thisArg && thisArg.canvas ? thisArg.canvas.width : argArray[2];
-                            const canvasH = thisArg && thisArg.canvas ? thisArg.canvas.height : argArray[3];
-                            if (canvasW > 0 && canvasW <= 64 && canvasH > 0 && canvasH <= 64) {
-                                const pixelIndex = Math.floor(pseudoRandom() * (imageData.data.length / 4)) * 4;
-                                if (pixelIndex >= 0 && pixelIndex < imageData.data.length) {
-                                    imageData.data[pixelIndex] = imageData.data[pixelIndex] ^ 1;
+                                const canvasW = thisArg && thisArg.canvas ? thisArg.canvas.width : (argArray[2] || 0);
+                                const canvasH = thisArg && thisArg.canvas ? thisArg.canvas.height : (argArray[3] || 0);
+                                if (canvasW > 0 && canvasW <= 1024 && canvasH > 0 && canvasH <= 1024) {
+                                    const pixelIndex = Math.floor(pseudoRandom() * (imageData.data.length / 4)) * 4;
+                                    if (pixelIndex >= 0 && pixelIndex < imageData.data.length) {
+                                        imageData.data[pixelIndex] = imageData.data[pixelIndex] ^ 1;
+                                    }
                                 }
+                            }
+                        } catch (e) { }
+                        return imageData;
+                    }
+            });
+        }
+
+        if (typeof HTMLCanvasElement !== 'undefined' && HTMLCanvasElement.prototype.toDataURL) {
+            const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+            HTMLCanvasElement.prototype.toDataURL = new Proxy(origToDataURL, {
+                apply(target, thisArg, argArray) {
+                    try {
+                        const ctx = thisArg.getContext && thisArg.getContext('2d');
+                        if (ctx && thisArg.width > 0 && thisArg.width <= 1024 && thisArg.height > 0 && thisArg.height <= 1024) {
+                            const img = ctx.getImageData(0, 0, 1, 1);
+                            if (img && img.data && img.data.length >= 4) {
+                                img.data[0] = img.data[0] ^ 1;
+                                ctx.putImageData(img, 0, 0);
                             }
                         }
                     } catch (e) { }
-                    return imageData;
+                    return Reflect.apply(target, thisArg, argArray);
                 }
             });
         }

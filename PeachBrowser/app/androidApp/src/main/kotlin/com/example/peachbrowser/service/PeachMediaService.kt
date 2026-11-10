@@ -365,6 +365,16 @@ class PeachMediaService : Service() {
         isServiceRunning = false
         releaseLocks()
         try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.cancel(NOTIFICATION_ID)
+        } catch (_: Exception) {}
+        try {
             mediaSession?.isActive = false
             mediaSession?.release()
             mediaSession = null

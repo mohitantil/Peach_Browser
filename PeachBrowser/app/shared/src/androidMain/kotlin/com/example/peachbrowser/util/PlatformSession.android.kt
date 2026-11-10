@@ -1,7 +1,20 @@
 package com.example.peachbrowser.util
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Handler
+import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.WebStorage
+import android.webkit.WebView
+import java.io.File
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 actual fun clearBrowserSession() {
     try {
@@ -10,6 +23,23 @@ actual fun clearBrowserSession() {
         cookieManager.removeSessionCookies(null)
         cookieManager.flush()
         WebStorage.getInstance().deleteAllData()
+
+        AndroidContextHolder.context?.let { ctx ->
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    val dummyWv = WebView(ctx)
+                    dummyWv.clearCache(true)
+                    dummyWv.clearFormData()
+                    dummyWv.destroy()
+                } catch (_: Exception) {}
+            }
+            try {
+                val webViewCacheDir = File(ctx.cacheDir, "org.chromium.android_webview")
+                if (webViewCacheDir.exists()) webViewCacheDir.deleteRecursively()
+                val defaultWvCache = File(ctx.cacheDir, "WebView")
+                if (defaultWvCache.exists()) defaultWvCache.deleteRecursively()
+            } catch (_: Exception) {}
+        }
     } catch (e: Exception) {
         e.printStackTrace()
     }
@@ -35,12 +65,11 @@ actual fun stopPlatformMediaService() {
 actual fun exitBrowserApp() {
     try {
         stopPlatformMediaService()
-        val cookieManager = CookieManager.getInstance()
-        cookieManager.removeAllCookies {
-            try {
-                cookieManager.flush()
-                WebStorage.getInstance().deleteAllData()
-            } catch (_: Exception) {}
+        clearBrowserSession()
+        val activity = AndroidContextHolder.context?.findActivity()
+        if (activity != null && !activity.isFinishing) {
+            activity.finishAffinity()
+        } else {
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     } catch (e: Exception) {
@@ -61,12 +90,19 @@ actual fun shredSiteData(host: String) {
         if (cleanHost.isBlank()) return
 
         val webStorage = WebStorage.getInstance()
-        webStorage.deleteOrigin("https://$cleanHost")
-        webStorage.deleteOrigin("http://$cleanHost")
+        val rootHost = cleanHost.removePrefix("www.")
+        val origins = listOf(
+            "https://$rootHost",
+            "http://$rootHost",
+            "https://www.$rootHost",
+            "http://www.$rootHost"
+        )
+        for (origin in origins) {
+            webStorage.deleteOrigin(origin)
+        }
 
         val cookieManager = CookieManager.getInstance()
-        val schemes = listOf("https://$cleanHost", "http://$cleanHost")
-        for (url in schemes) {
+        for (url in origins) {
             val cookies = cookieManager.getCookie(url)
             if (!cookies.isNullOrBlank()) {
                 val cookieList = cookies.split(";")

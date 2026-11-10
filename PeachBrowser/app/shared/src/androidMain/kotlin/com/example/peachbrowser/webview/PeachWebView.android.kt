@@ -10,6 +10,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.graphics.Bitmap
 import android.media.MediaScannerConnection
 import android.net.Uri
@@ -73,6 +75,38 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+private val sessionEntropySalt = kotlin.random.Random.nextInt(10000, 999999)
+
+private fun safeStartExternalIntent(context: Context, url: String, webView: WebView?): Boolean {
+    val intent = try {
+        Intent.parseUri(url, Intent.URI_INTENT_SCHEME).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            component = null
+            selector = null
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    } catch (_: Exception) {
+        return false
+    }
+
+    val packageManager = context.packageManager
+    if (intent.resolveActivity(packageManager) != null) {
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    val fallbackUrl = intent.getStringExtra("browser_fallback_url")
+    if (!fallbackUrl.isNullOrBlank() && (fallbackUrl.startsWith("http://", ignoreCase = true) || fallbackUrl.startsWith("https://", ignoreCase = true))) {
+        webView?.loadUrl(fallbackUrl)
+        return true
+    }
+    return false
 }
 
 object AdBlocker {
@@ -569,22 +603,18 @@ actual fun PeachWebView(
     var longPressedImageUrl by remember { mutableStateOf<String?>(null) }
     val audioFocusManager = koinInject<com.example.peachbrowser.util.PeachAudioFocusManager>()
     var pendingPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
+    var pendingOriginPrompt by remember { mutableStateOf<PermissionRequest?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val pendingReq = pendingPermissionRequest
+        pendingPermissionRequest = null
         if (pendingReq != null) {
             val allGranted = permissions.isNotEmpty() && permissions.entries.all { it.value }
             if (allGranted) {
-                val originStr = pendingReq.origin.toString()
-                val resources = pendingReq.resources
-                SessionPermissionManager.grantResources(tabId, originStr, resources)
-                try {
-                    pendingReq.grant(resources)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                // OS permissions granted; now prompt user specifically for this origin session
+                pendingOriginPrompt = pendingReq
             } else {
                 try {
                     pendingReq.deny()
@@ -592,7 +622,6 @@ actual fun PeachWebView(
                     e.printStackTrace()
                 }
             }
-            pendingPermissionRequest = null
         }
     }
 
@@ -605,26 +634,25 @@ actual fun PeachWebView(
                 e.printStackTrace()
             }
         } else {
-            pendingPermissionRequest = request
             val requiredOsPermissions = mutableListOf<String>()
             for (res in request.resources) {
                 if (res == PermissionRequest.RESOURCE_VIDEO_CAPTURE) {
-                    requiredOsPermissions.add(Manifest.permission.CAMERA)
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                        requiredOsPermissions.add(Manifest.permission.CAMERA)
+                    }
                 } else if (res == PermissionRequest.RESOURCE_AUDIO_CAPTURE) {
-                    requiredOsPermissions.add(Manifest.permission.RECORD_AUDIO)
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                        requiredOsPermissions.add(Manifest.permission.RECORD_AUDIO)
+                    }
                 }
             }
 
             if (requiredOsPermissions.isNotEmpty()) {
+                pendingPermissionRequest = request
                 permissionLauncher.launch(requiredOsPermissions.toTypedArray())
             } else {
-                SessionPermissionManager.grantResources(tabId, originStr, request.resources)
-                try {
-                    request.grant(request.resources)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                pendingPermissionRequest = null
+                // OS permissions already granted; prompt user for site origin approval
+                pendingOriginPrompt = request
             }
         }
     }
@@ -632,6 +660,9 @@ actual fun PeachWebView(
     val handlePermissionRequestCanceled: (PermissionRequest) -> Unit = { request ->
         if (pendingPermissionRequest == request) {
             pendingPermissionRequest = null
+        }
+        if (pendingOriginPrompt == request) {
+            pendingOriginPrompt = null
         }
     }
 
@@ -672,7 +703,8 @@ actual fun PeachWebView(
                         false
                     }
                     setDownloadListener { downloadUrl, userAgent, contentDisposition, mimetype, _ ->
-                        enqueuePeachDownload(ctx, downloadUrl, userAgent, contentDisposition, mimetype, browserViewModel)
+                        val currentCtx = (context as? android.content.MutableContextWrapper)?.baseContext ?: context
+                        enqueuePeachDownload(currentCtx, downloadUrl, userAgent, contentDisposition, mimetype, browserViewModel)
                     }
 
                     settings.apply {
@@ -808,7 +840,7 @@ actual fun PeachWebView(
                                     view?.evaluateJavascript(shieldScript, null)
                                 }
                                 if (isFarblingActive && farblingScript.isNotBlank()) {
-                                    view?.evaluateJavascript(farblingScript, null)
+                                    view?.evaluateJavascript("window.__PEACH_SESSION_SALT__ = $sessionEntropySalt;\n" + farblingScript, null)
                                 }
                                 if (isBgActive && backgroundScript.isNotBlank()) {
                                     view?.evaluateJavascript(backgroundScript, null)
@@ -925,15 +957,8 @@ actual fun PeachWebView(
                             ) {
                                 return false
                             }
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(reqUrl)).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                view?.context?.startActivity(intent)
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                            return true
+                            val c = view?.context ?: return false
+                            return safeStartExternalIntent(c, reqUrl, view)
                         }
                     }
 
@@ -1038,6 +1063,11 @@ actual fun PeachWebView(
                                     useWideViewPort = true
                                     loadWithOverviewMode = true
                                     userAgentString = view.settings.userAgentString
+                                    try {
+                                        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+                                            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(this, emptySet())
+                                        }
+                                    } catch (_: Exception) {}
                                 }
                                 try {
                                     val cm = CookieManager.getInstance()
@@ -1066,14 +1096,29 @@ actual fun PeachWebView(
                             val titleView = android.widget.TextView(act).apply {
                                 text = "Secure Sign-In"
                                 textSize = 14f
+                                typeface = android.graphics.Typeface.DEFAULT_BOLD
                                 setTextColor(android.graphics.Color.parseColor("#1E1E2E"))
                                 maxLines = 1
                                 ellipsize = android.text.TextUtils.TruncateAt.END
+                            }
+
+                            val hostView = android.widget.TextView(act).apply {
+                                text = "🔒 Authenticating..."
+                                textSize = 11f
+                                setTextColor(android.graphics.Color.parseColor("#6C757D"))
+                                maxLines = 1
+                                ellipsize = android.text.TextUtils.TruncateAt.END
+                            }
+
+                            val titleContainer = android.widget.LinearLayout(act).apply {
+                                orientation = android.widget.LinearLayout.VERTICAL
                                 layoutParams = android.widget.LinearLayout.LayoutParams(
                                     0,
                                     ViewGroup.LayoutParams.WRAP_CONTENT,
                                     1f
                                 )
+                                addView(titleView)
+                                addView(hostView)
                             }
 
                             val closeBtn = android.widget.TextView(act).apply {
@@ -1087,7 +1132,7 @@ actual fun PeachWebView(
                                 }
                             }
 
-                            headerBar.addView(titleView)
+                            headerBar.addView(titleContainer)
                             headerBar.addView(closeBtn)
                             rootLayout.addView(
                                 headerBar,
@@ -1126,6 +1171,13 @@ actual fun PeachWebView(
                             (view as? PeachNativeWebView)?.currentOAuthWebView = popupWebView
 
                             popupWebView.webChromeClient = object : WebChromeClient() {
+                                override fun onReceivedTitle(view: WebView?, title: String?) {
+                                    super.onReceivedTitle(view, title)
+                                    if (!title.isNullOrBlank()) {
+                                        titleView.text = title
+                                    }
+                                }
+
                                 override fun onCloseWindow(window: WebView?) {
                                     try {
                                         CookieManager.getInstance().flush()
@@ -1135,8 +1187,26 @@ actual fun PeachWebView(
                             }
 
                             popupWebView.webViewClient = object : WebViewClient() {
+                                override fun onPageStarted(v: WebView?, url: String?, favicon: Bitmap?) {
+                                    super.onPageStarted(v, url, favicon)
+                                    if (url != null) {
+                                        val uri = try { Uri.parse(url) } catch (_: Exception) { null }
+                                        val host = uri?.host ?: ""
+                                        val isHttps = url.startsWith("https://", ignoreCase = true)
+                                        val schemeIcon = if (isHttps) "🔒 " else "⚠️ "
+                                        hostView.text = "$schemeIcon$host"
+                                    }
+                                }
+
                                 override fun onPageFinished(v: WebView?, url: String?) {
                                     super.onPageFinished(v, url)
+                                    if (url != null) {
+                                        val uri = try { Uri.parse(url) } catch (_: Exception) { null }
+                                        val host = uri?.host ?: ""
+                                        val isHttps = url.startsWith("https://", ignoreCase = true)
+                                        val schemeIcon = if (isHttps) "🔒 " else "⚠️ "
+                                        hostView.text = "$schemeIcon$host"
+                                    }
                                     try {
                                         CookieManager.getInstance().flush()
                                     } catch (_: Exception) {}
@@ -1144,20 +1214,13 @@ actual fun PeachWebView(
 
                                 override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
                                     val u = request?.url?.toString() ?: ""
-                                    if (u.startsWith("http://") || u.startsWith("https://") ||
-                                        u.startsWith("about:") || u.startsWith("javascript:") || u.startsWith("blob:")
+                                    if (u.startsWith("http://", ignoreCase = true) || u.startsWith("https://", ignoreCase = true) ||
+                                        u.startsWith("about:", ignoreCase = true) || u.startsWith("javascript:", ignoreCase = true) || u.startsWith("blob:", ignoreCase = true)
                                     ) {
                                         return false
                                     }
-                                    return try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(u)).apply {
-                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        }
-                                        v?.context?.startActivity(intent)
-                                        true
-                                    } catch (_: Exception) {
-                                        false
-                                    }
+                                    val c = v?.context ?: return false
+                                    return safeStartExternalIntent(c, u, v)
                                 }
                             }
 
@@ -1179,6 +1242,10 @@ actual fun PeachWebView(
                         object {
                             @android.webkit.JavascriptInterface
                             fun onMediaStateChanged(isPlaying: Boolean) {
+                                val currentUrl = nativeWebView.url ?: ""
+                                if (currentUrl.isBlank() || (!currentUrl.startsWith("http://", ignoreCase = true) && !currentUrl.startsWith("https://", ignoreCase = true))) {
+                                    return
+                                }
                                 post {
                                     browserViewModel.processIntent(BrowserIntent.SetAudioPlaying(isPlaying))
                                 }
@@ -1186,6 +1253,10 @@ actual fun PeachWebView(
 
                             @android.webkit.JavascriptInterface
                             fun onMediaMetadataUpdated(title: String, artist: String, artworkUrl: String, isPlaying: Boolean) {
+                                val currentUrl = nativeWebView.url ?: ""
+                                if (currentUrl.isBlank() || (!currentUrl.startsWith("http://", ignoreCase = true) && !currentUrl.startsWith("https://", ignoreCase = true))) {
+                                    return
+                                }
                                 post {
                                     browserViewModel.processIntent(
                                         BrowserIntent.UpdateMediaMetadata(title, artist, artworkUrl, isPlaying)
@@ -1200,16 +1271,24 @@ actual fun PeachWebView(
 
                             @android.webkit.JavascriptInterface
                             fun isShieldActive(host: String): Boolean {
-                                return nativeWebView.isShieldActiveForHost(host)
+                                val pageHost = try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                val queryHost = if (host.isBlank() || host == pageHost || host.endsWith(".$pageHost")) host else pageHost
+                                return nativeWebView.isShieldActiveForHost(queryHost)
                             }
 
                             @android.webkit.JavascriptInterface
                             fun isFarblingActive(host: String): Boolean {
-                                return nativeWebView.isFarblingActiveForHost(host)
+                                val pageHost = try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                val queryHost = if (host.isBlank() || host == pageHost || host.endsWith(".$pageHost")) host else pageHost
+                                return nativeWebView.isFarblingActiveForHost(queryHost)
                             }
 
                             @android.webkit.JavascriptInterface
                             fun isSiteException(host: String): Boolean {
+                                val pageHost = try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                if (pageHost.isBlank() || (host != pageHost && !host.endsWith(".$pageHost"))) {
+                                    return false
+                                }
                                 return nativeWebView.isSiteException(host)
                             }
 
@@ -1258,7 +1337,7 @@ actual fun PeachWebView(
                                 WebViewCompat.addDocumentStartJavaScript(this, shieldScript, setOf("*"))
                             }
                             if (farblingScript.isNotBlank()) {
-                                WebViewCompat.addDocumentStartJavaScript(this, farblingScript, setOf("*"))
+                                WebViewCompat.addDocumentStartJavaScript(this, "window.__PEACH_SESSION_SALT__ = $sessionEntropySalt;\n" + farblingScript, setOf("*"))
                             }
                             if (backgroundScript.isNotBlank()) {
                                 WebViewCompat.addDocumentStartJavaScript(this, backgroundScript, setOf("*"))
@@ -1476,6 +1555,80 @@ actual fun PeachWebView(
         }
     }
 
+    pendingOriginPrompt?.let { req ->
+        val origin = req.origin.toString()
+        val host = try { Uri.parse(origin).host ?: origin } catch (_: Exception) { origin }
+        val hasCam = req.resources.any { it.contains("VIDEO_CAPTURE", ignoreCase = true) }
+        val hasMic = req.resources.any { it.contains("AUDIO_CAPTURE", ignoreCase = true) }
+        val sensorNames = when {
+            hasCam && hasMic -> "Camera and Microphone"
+            hasCam -> "Camera"
+            hasMic -> "Microphone"
+            else -> "Hardware Sensors"
+        }
+
+        AlertDialog(
+            onDismissRequest = {
+                try { req.deny() } catch (_: Exception) {}
+                pendingOriginPrompt = null
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = if (hasCam && hasMic) "📷🎙️" else if (hasCam) "📷" else "🎙️", fontSize = 20.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Sensor Permission Request",
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 16.sp,
+                        color = Color(0xFF1E1E2E)
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "$host wants to access your $sensorNames for this session. Permissions will be automatically revoked when you close this site or app.",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 14.sp,
+                    color = Color(0xFF49454F)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val resources = req.resources
+                        SessionPermissionManager.grantResources(tabId, origin, resources)
+                        try {
+                            req.grant(resources)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        pendingOriginPrompt = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF5E35B1)
+                    )
+                ) {
+                    Text("Allow for this session", fontFamily = FontFamily.SansSerif)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        try {
+                            req.deny()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        pendingOriginPrompt = null
+                    }
+                ) {
+                    Text("Block", fontFamily = FontFamily.SansSerif, color = Color(0xFF5E35B1))
+                }
+            }
+        )
+    }
+
     DisposableEffect(lifecycleOwner, browserState.isClearSessionOnExitEnabled, browserState.isPrivateMode) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_DESTROY && activity?.isFinishing == true) {
@@ -1494,7 +1647,11 @@ actual fun PeachWebView(
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            try {
+                pendingOriginPrompt?.deny()
+            } catch (_: Exception) {}
             pendingPermissionRequest = null
+            pendingOriginPrompt = null
             SessionPermissionManager.clearTabPermissions(tabId)
             if (activity?.isFinishing == true && (browserState.isClearSessionOnExitEnabled || browserState.isPrivateMode)) {
                 clearBrowserSession()

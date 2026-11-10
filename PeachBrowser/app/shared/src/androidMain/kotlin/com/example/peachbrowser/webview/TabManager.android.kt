@@ -13,6 +13,9 @@ object AppBackgroundTracker {
     fun updateBackgroundState(flag: Boolean) {
         isBackgrounded = flag
         AndroidTabWebViewPool.setAppBackgrounded(flag)
+        if (flag) {
+            com.example.peachbrowser.util.SessionPermissionManager.clearAllPermissions()
+        }
     }
 }
 
@@ -48,6 +51,7 @@ object AndroidTabWebViewPool {
     fun get(tabId: String): PeachNativeWebView? = pool[tabId]
 
     fun remove(tabId: String) {
+        com.example.peachbrowser.util.SessionPermissionManager.clearTabPermissions(tabId)
         val webView = pool.remove(tabId) ?: return
         try {
             webView.hideCustomViewIfShowing()
@@ -64,6 +68,7 @@ object AndroidTabWebViewPool {
     }
 
     fun clearAll() {
+        com.example.peachbrowser.util.SessionPermissionManager.clearAllPermissions()
         val keys = pool.keys().toList()
         for (key in keys) {
             remove(key)
