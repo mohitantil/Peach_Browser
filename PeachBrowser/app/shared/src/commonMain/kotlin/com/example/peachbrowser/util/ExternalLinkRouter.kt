@@ -17,8 +17,38 @@ object ExternalLinkRouter {
 
     fun extractUrl(text: String): String? {
         val trimmed = text.trim()
-        val match = URL_REGEX.find(trimmed)
-        return match?.value
+        val match = URL_REGEX.find(trimmed) ?: return null
+        var url = match.value
+
+        // Clean trailing sentence punctuation attached from natural language text
+        while (url.isNotEmpty() && (url.endsWith('.') || url.endsWith(',') || url.endsWith(';') || 
+                                    url.endsWith(':') || url.endsWith('!') || url.endsWith('?'))) {
+            url = url.dropLast(1)
+        }
+
+        // Handle unbalanced trailing closing parenthesis e.g. "(https://example.com)"
+        while (url.endsWith(')')) {
+            val openCount = url.count { it == '(' }
+            val closeCount = url.count { it == ')' }
+            if (closeCount > openCount) {
+                url = url.dropLast(1)
+            } else {
+                break
+            }
+        }
+
+        // Handle unbalanced trailing closing square bracket e.g. "[https://example.com]"
+        while (url.endsWith(']')) {
+            val openCount = url.count { it == '[' }
+            val closeCount = url.count { it == ']' }
+            if (closeCount > openCount) {
+                url = url.dropLast(1)
+            } else {
+                break
+            }
+        }
+
+        return url.ifBlank { null }
     }
 
     /**

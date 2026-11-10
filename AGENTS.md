@@ -369,6 +369,18 @@
       - Shared unit tests: `:app:shared:jvmTest` (`BUILD SUCCESSFUL in 13s`).
       - Android Debug build: `:app:androidApp:assembleDebug` (`BUILD SUCCESSFUL in 1m 15s`).
       - Output artifact: `PeachBrowser/app/androidApp/build/outputs/apk/debug/androidApp-debug.apk` (43.5 MB).
+  - **Comprehensive Multiplatform JUnit Test Suite Upgrade (`v5.1.2`)**:
+    - Expanded test coverage from 1 single test file to 36 tests across 7 test suites:
+      1. `SearchEngineUtilTest.kt` (9 tests): Validates DuckDuckGo, Brave, Google, Startpage, and Bing query generation, RFC 3986 percent-encoding of query strings (`#`, `&`, `+`, `=`, `?`, `/`, `%`), UTF-8 Unicode/emoji support (`🍑`), and `fromName` engine resolution with DuckDuckGo fallback.
+      2. `MediaDetectorTest.kt` (3 tests): Hardened domain matching logic in `MediaDetector.kt` from broad substring `host.contains(it)` to strict boundary checks (`host == it || host.endsWith(".$it")`), preventing spoofing attacks (`notyoutube.com`, `youtube.com.attacker.org`, `fake-spotify.com`). Validates streaming domains across YouTube, YT Music, Spotify, Apple Music, Gaana, JioSaavn, Wynk, SoundCloud, Deezer, Pandora, and Bandcamp.
+      3. `UrlSanitizerTest.kt` (9 tests): Added coverage for percent-encoded tracking parameters (`%75%74%6d_source=`, `%66%62%63%6c%69%64=`), preservation of legitimate parameters across mixed queries with URL fragments (`#results`), and edge cases.
+      4. `SessionPermissionManagerTest.kt` (5 tests): Tests WebKit sensor mapping (`AUDIO_CAPTURE` -> `MICROPHONE`, `VIDEO_CAPTURE` -> `CAMERA`), strict tab/origin isolation, granular `revokeSitePermissions`, tab navigation auto-clear (`clearTabPermissions`), and global destruction shredding (`clearAllPermissions`).
+      5. `ExternalLinkRouterTest.kt` (3 tests): Discovered and fixed an unbalanced parenthesis and punctuation bug in `ExternalLinkRouter.extractUrl` where links enclosed in parentheses or with trailing sentence punctuation (e.g. `(https://en.wikipedia.org/wiki/Kotlin_(programming_language)).`) had trailing delimiters attached. Implemented balanced bracket and sentence punctuation trimming.
+      6. `BrowserMviStateTest.kt` (5 tests): Tests `SleepTimerState` countdown formatting (`15:00`, `00:45`, `01:05`), `SiteShieldConfig` security defaults, `DEFAULT_SITE_EXCEPTIONS` inclusion of critical AI/OAuth portals, `DownloadItem` progress calculation, and `MediaMetadataState` equality invariants.
+    - Verified Test Execution:
+      - `:app:shared:jvmTest`: 36 tests completed, 0 failed, 0 skipped (`BUILD SUCCESSFUL in 2m 7s`).
+      - `:app:androidApp:assembleDebug`: `BUILD SUCCESSFUL in 19s`.
+
 
 
 

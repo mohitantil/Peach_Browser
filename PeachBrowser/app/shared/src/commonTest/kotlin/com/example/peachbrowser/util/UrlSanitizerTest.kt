@@ -81,6 +81,25 @@ class UrlSanitizerTest {
     }
 
     @Test
+    fun testPercentEncodedTrackingParams() {
+        // Percent-encoded "utm_source" (%75%74%6d_source) must be detected and stripped
+        val encodedUtm = "https://example.com/page?%75%74%6d_source=newsletter&article=42"
+        assertEquals("https://example.com/page?article=42", UrlSanitizer.stripTrackingParams(encodedUtm))
+
+        // Percent-encoded "fbclid" (%66%62%63%6c%69%64) must be detected and stripped
+        val encodedFbclid = "https://example.com/shop?item=shoe&%66%62%63%6c%69%64=iw123"
+        assertEquals("https://example.com/shop?item=shoe", UrlSanitizer.stripTrackingParams(encodedFbclid))
+    }
+
+    @Test
+    fun testMixedFunctionalAndTrackingParamsWithFragment() {
+        // Functional parameters (q, page, sort) must be preserved while utm and click IDs are stripped
+        val url = "https://example.com/search?q=kotlin&utm_source=twitter&page=2&fbclid=xyz&sort=recent#results"
+        val sanitized = UrlSanitizer.stripTrackingParams(url)
+        assertEquals("https://example.com/search?q=kotlin&page=2&sort=recent#results", sanitized)
+    }
+
+    @Test
     fun testDeAmpSecurityAndNegativeTests() {
         // Genuine Google AMP should be de-amped
         val genuineAmp = "https://www.google.com/amp/s/example.com/article"
