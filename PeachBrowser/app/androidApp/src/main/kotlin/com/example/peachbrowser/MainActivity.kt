@@ -75,19 +75,28 @@ class MainActivity : ComponentActivity() {
                         PeachMediaService.stop(this@MainActivity)
                         return@collect
                     }
+                    val currentUrl = browserViewModel.state.value.currentUrl
+                    val fallbackArtist = try {
+                        android.net.Uri.parse(currentUrl).host
+                            ?.removePrefix("www.")?.removePrefix("m.")
+                            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } ?: "Peach Browser"
+                    } catch (_: Exception) {
+                        "Peach Browser"
+                    }
+                    val displayArtist = meta.artist.ifBlank { fallbackArtist }
                     if (isPlaying) {
                         wasMediaSessionActive = true
                         PeachMediaService.startOrUpdate(
                             context = this@MainActivity,
                             title = meta.title.ifBlank { browserViewModel.state.value.activePageTitle.ifBlank { "Peach Browser" } },
-                            artist = meta.artist.ifBlank { browserViewModel.state.value.currentUrl },
+                            artist = displayArtist,
                             isPlaying = true
                         )
                     } else if (wasMediaSessionActive && meta.title.isNotBlank()) {
                         PeachMediaService.startOrUpdate(
                             context = this@MainActivity,
                             title = meta.title.ifBlank { browserViewModel.state.value.activePageTitle.ifBlank { "Peach Browser" } },
-                            artist = meta.artist.ifBlank { browserViewModel.state.value.currentUrl },
+                            artist = displayArtist,
                             isPlaying = false
                         )
                     } else if (!isPlaying && meta.title.isBlank()) {
@@ -155,10 +164,18 @@ class MainActivity : ComponentActivity() {
             val isStreamingSite = MediaDetector.isKnownStreamingSite(activeUrl)
             if (state.isBackgroundPlayEnabled) {
                 if (state.isAudioPlaying || PeachMediaService.isServiceRunning) {
+                    val fallbackArtist = try {
+                        android.net.Uri.parse(activeUrl).host
+                            ?.removePrefix("www.")?.removePrefix("m.")
+                            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } ?: "Peach Browser"
+                    } catch (_: Exception) {
+                        "Peach Browser"
+                    }
+                    val displayArtist = state.mediaMetadata.artist.ifBlank { fallbackArtist }
                     PeachMediaService.startOrUpdate(
                         context = this,
                         title = state.mediaMetadata.title.ifBlank { state.activePageTitle.ifBlank { "Peach Browser" } },
-                        artist = state.mediaMetadata.artist.ifBlank { activeUrl },
+                        artist = displayArtist,
                         isPlaying = state.isAudioPlaying
                     )
                 }

@@ -354,5 +354,21 @@
     - Graceful Exit: Replaced `Process.killProcess` with `activity.finishAffinity()`, and removed iOS `exit(0)`.
     - Skipped SearXNG & AI Chat companion modules per explicit directive.
     - Verified compilation (`:app:androidApp:assembleDebug`, `BUILD SUCCESSFUL in 1m 13s`) and unit tests (`:app:shared:jvmTest`, `BUILD SUCCESSFUL in 1m 7s`).
+  - **Audio Focus & Media Notification Stabilization Pass (`v5.1.2`)**:
+    - Addressed User Feedback & Diagnosed Two Primary Regressions:
+      1. *Missing Active Media Notification*:
+         - Root Cause: In commit `643be01`, `@JavascriptInterface` methods `onMediaStateChanged` and `onMediaMetadataUpdated` added a URL validation check calling `nativeWebView.url`. Because `@JavascriptInterface` runs on a background binder thread (`JavaBridge`), accessing `WebView.url` returned empty/null or threw a ThreadCheck exception. This triggered an early return before `post { browserViewModel.processIntent(...) }` could execute, preventing `SetAudioPlaying` and `UpdateMediaMetadata` from ever reaching the ViewModel. Consequently, `isAudioPlaying` remained false, and `MainActivity.observeMediaStateForPersistentNotification()` never started `PeachMediaService`.
+         - Remediation: Removed the off-thread `nativeWebView.url` guard from both `@JavascriptInterface` handlers; dispatches `BrowserIntent.SetAudioPlaying` and `UpdateMediaMetadata` directly on the main Looper inside `post { ... }`.
+         - Thread-Safe Bridge Host Resolution: Replaced off-thread `Uri.parse(nativeWebView.url).host` in `isShieldActive`, `isFarblingActive`, and `isSiteException` with the volatile `nativeWebView.currentMainFrameHost`.
+         - Formatted Notification Artist Host: In `MainActivity.kt`, formatted fallback notification subtitle to clean capitalized host (e.g. "Youtube.com") rather than raw long URL string.
+         - Clean Session Teardown on Top-Level Navigation: Added host-change check in `onPageStarted` in `PeachWebView.android.kt` to reset `SetAudioPlaying(false)` and `UpdateMediaMetadata("", "", "", false)` when navigating away to another website, cleanly dismissing obsolete media notifications.
+      2. *Snapchat Audio Focus Interruption & Stuttering Loop*:
+         - Root Cause: `background_playback.bundle.js` contained a legacy `pause` event listener that executed `setTimeout(() => { el.play(); }, 300)` whenever any pause event fired while `isAppBackgrounded()` was true. When Snapchat (or another app) played audio, Android OS revoked audio focus from Chromium, causing Chromium's internal media player to pause YouTube. 300ms later, the rogue script forced `el.play()`. Chromium rejected or immediately paused playback again because Snapchat held audio focus, triggering another `pause` event and scheduling another `setTimeout` in an infinite 300ms play-pause stuttering loop. This also corrupted Chromium's internal `mIsPausedByAudioFocus` flag, preventing Chromium's native `AudioFocusDelegate` from auto-resuming playback when Snapchat was closed.
+         - Remediation: Completely removed the rogue 300ms `pause` listener from both Android and iOS asset bundles (`background_playback.bundle.js`). Chromium's native `AudioFocusDelegate` now handles `AUDIOFOCUS_LOSS_TRANSIENT` and `AUDIOFOCUS_GAIN` cleanly without DOM script interference, eliminating all stuttering and enabling seamless pause and resume.
+    - Verified Compilation & Tests:
+      - Shared unit tests: `:app:shared:jvmTest` (`BUILD SUCCESSFUL in 13s`).
+      - Android Debug build: `:app:androidApp:assembleDebug` (`BUILD SUCCESSFUL in 1m 15s`).
+      - Output artifact: `PeachBrowser/app/androidApp/build/outputs/apk/debug/androidApp-debug.apk` (43.5 MB).
+
 
 

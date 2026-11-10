@@ -26,7 +26,7 @@
             if (window.PeachNativeBridge && typeof window.PeachNativeBridge[name] === 'function') {
                 return !!window.PeachNativeBridge[name]();
             }
-        } catch (e) {}
+        } catch (e) { }
         return false;
     }
 
@@ -36,7 +36,7 @@
             if (window.__PEACH_CONFIG__ && typeof window.__PEACH_CONFIG__.bgPlayActive === 'boolean') {
                 return !!window.__PEACH_CONFIG__.bgPlayActive;
             }
-        } catch (e) {}
+        } catch (e) { }
         return true;
     }
 
@@ -45,7 +45,7 @@
         return window.__PEACH_APP_BACKGROUNDED__ === true;
     }
 
-    window.__PEACH_PAUSE_ALL_MEDIA__ = function() {
+    window.__PEACH_PAUSE_ALL_MEDIA__ = function () {
         try {
             window.__PEACH_EXTERNAL_PAUSED__ = true;
             const mediaElements = document.querySelectorAll('video, audio');
@@ -53,15 +53,15 @@
                 media.__peach_sleep_timer_paused = true;
                 try {
                     media.pause();
-                } catch (e) {}
+                } catch (e) { }
             });
             if (window.PeachNativeBridge && typeof window.PeachNativeBridge.onMediaStateChanged === 'function') {
                 window.PeachNativeBridge.onMediaStateChanged(false);
             }
-        } catch (err) {}
+        } catch (err) { }
     };
 
-    window.__PEACH_RESUME_ALL_MEDIA__ = function() {
+    window.__PEACH_RESUME_ALL_MEDIA__ = function () {
         try {
             window.__PEACH_EXTERNAL_PAUSED__ = false;
             const mediaElements = document.querySelectorAll('video, audio');
@@ -71,15 +71,15 @@
                     try {
                         const p = media.play();
                         if (p !== undefined && p && typeof p.catch === 'function') {
-                            p.catch(() => {});
+                            p.catch(() => { });
                         }
-                    } catch (e) {}
+                    } catch (e) { }
                 }
             });
-        } catch (err) {}
+        } catch (err) { }
     };
 
-    window.__PEACH_DUCK_MEDIA__ = function(duck) {
+    window.__PEACH_DUCK_MEDIA__ = function (duck) {
         try {
             const mediaElements = document.querySelectorAll('video, audio');
             mediaElements.forEach(media => {
@@ -93,7 +93,7 @@
                     delete media.__peach_orig_volume;
                 }
             });
-        } catch (e) {}
+        } catch (e) { }
     };
 
     if (window.__PEACH_BG_PLAYBACK_ACTIVE__) {
@@ -124,11 +124,11 @@
             try {
                 Object.defineProperty(target, prop, {
                     get: () => val,
-                    set: () => {},
+                    set: () => { },
                     configurable: true,
                     enumerable: true
                 });
-            } catch (e) {}
+            } catch (e) { }
         };
 
         defineVisProperty(document, 'hidden', false);
@@ -144,20 +144,20 @@
                 writable: true,
                 configurable: true
             });
-        } catch (e) {}
+        } catch (e) { }
 
         try {
             Object.defineProperty(document, 'onvisibilitychange', {
                 get: () => null,
-                set: () => {},
+                set: () => { },
                 configurable: true
             });
             Object.defineProperty(window, 'onblur', {
                 get: () => null,
-                set: () => {},
+                set: () => { },
                 configurable: true
             });
-        } catch (e) {}
+        } catch (e) { }
 
         const blockedEvents = new Set([
             'visibilitychange',
@@ -167,7 +167,7 @@
         ]);
 
         const originalAddEventListener = EventTarget.prototype.addEventListener;
-        EventTarget.prototype.addEventListener = function(type, listener, options) {
+        EventTarget.prototype.addEventListener = function (type, listener, options) {
             if (blockedEvents.has(type) && (this === document || this === window)) {
                 return;
             }
@@ -180,44 +180,11 @@
             originalAddEventListener.call(document, evtName, killer, true);
         });
 
-        // Background supervisor: active ONLY while backgrounded.
-        // In the foreground, there is zero interference with pause events.
-        // If a track finishes (ended === true), supervisor does not re-play track 1,
-        // allowing YouTube's native autoplay queue to load and play track 2.
-        document.addEventListener('pause', function(e) {
-            try {
-                const el = e && e.target;
-                if (!el || (el.tagName !== 'VIDEO' && el.tagName !== 'AUDIO')) return;
-
-                // Foreground: 100% native behavior.
-                if (!isAppBackgrounded()) return;
-                if (window.__PEACH_EXTERNAL_PAUSED__ || el.__peach_sleep_timer_paused) return;
-                if (!bgPlayEnabled()) return;
-
-                // If track ended, do NOT re-arm old track; let autoplay advance to next track!
-                if (el.ended) return;
-
-                setTimeout(() => {
-                    try {
-                        if (!isAppBackgrounded()) return;
-                        if (window.__PEACH_EXTERNAL_PAUSED__ || el.__peach_sleep_timer_paused) return;
-                        if (!bgPlayEnabled()) return;
-                        if (!el.paused || el.ended) return;
-
-                        const p = el.play();
-                        if (p !== undefined && p && typeof p.catch === 'function') {
-                            p.catch(() => {});
-                        }
-                    } catch (err) {}
-                }, 300);
-            } catch (err) {}
-        }, true);
-
         // Keep YouTube inactivity watchdog satisfied
         window._lact = Date.now();
         setInterval(() => {
-            try { window._lact = Date.now(); } catch (e) {}
+            try { window._lact = Date.now(); } catch (e) { }
         }, 20000);
 
-    } catch (e) {}
+    } catch (e) { }
 })();

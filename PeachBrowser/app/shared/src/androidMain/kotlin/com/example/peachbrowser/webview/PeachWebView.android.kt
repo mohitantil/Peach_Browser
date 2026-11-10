@@ -821,6 +821,10 @@ actual fun PeachWebView(
                                 )
                             )
                             val currentHost = try { Uri.parse(pageUrl ?: "").host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                            if (tabId == browserViewModel.state.value.activeTabId && currentHost.isNotBlank() && currentMainFrameHost.isNotBlank() && currentHost != currentMainFrameHost) {
+                                browserViewModel.processIntent(BrowserIntent.SetAudioPlaying(false))
+                                browserViewModel.processIntent(BrowserIntent.UpdateMediaMetadata("", "", "", false))
+                            }
                             if (currentHost.isNotBlank()) {
                                 currentMainFrameHost = currentHost
                                 AdBlocker.currentMainFrameHost = currentHost
@@ -1242,10 +1246,6 @@ actual fun PeachWebView(
                         object {
                             @android.webkit.JavascriptInterface
                             fun onMediaStateChanged(isPlaying: Boolean) {
-                                val currentUrl = nativeWebView.url ?: ""
-                                if (currentUrl.isBlank() || (!currentUrl.startsWith("http://", ignoreCase = true) && !currentUrl.startsWith("https://", ignoreCase = true))) {
-                                    return
-                                }
                                 post {
                                     browserViewModel.processIntent(BrowserIntent.SetAudioPlaying(isPlaying))
                                 }
@@ -1253,10 +1253,6 @@ actual fun PeachWebView(
 
                             @android.webkit.JavascriptInterface
                             fun onMediaMetadataUpdated(title: String, artist: String, artworkUrl: String, isPlaying: Boolean) {
-                                val currentUrl = nativeWebView.url ?: ""
-                                if (currentUrl.isBlank() || (!currentUrl.startsWith("http://", ignoreCase = true) && !currentUrl.startsWith("https://", ignoreCase = true))) {
-                                    return
-                                }
                                 post {
                                     browserViewModel.processIntent(
                                         BrowserIntent.UpdateMediaMetadata(title, artist, artworkUrl, isPlaying)
@@ -1271,21 +1267,27 @@ actual fun PeachWebView(
 
                             @android.webkit.JavascriptInterface
                             fun isShieldActive(host: String): Boolean {
-                                val pageHost = try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                val pageHost = nativeWebView.currentMainFrameHost.ifBlank {
+                                    try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                }
                                 val queryHost = if (host.isBlank() || host == pageHost || host.endsWith(".$pageHost")) host else pageHost
                                 return nativeWebView.isShieldActiveForHost(queryHost)
                             }
 
                             @android.webkit.JavascriptInterface
                             fun isFarblingActive(host: String): Boolean {
-                                val pageHost = try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                val pageHost = nativeWebView.currentMainFrameHost.ifBlank {
+                                    try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                }
                                 val queryHost = if (host.isBlank() || host == pageHost || host.endsWith(".$pageHost")) host else pageHost
                                 return nativeWebView.isFarblingActiveForHost(queryHost)
                             }
 
                             @android.webkit.JavascriptInterface
                             fun isSiteException(host: String): Boolean {
-                                val pageHost = try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                val pageHost = nativeWebView.currentMainFrameHost.ifBlank {
+                                    try { Uri.parse(nativeWebView.url).host ?: "" } catch (_: Exception) { "" }
+                                }
                                 if (pageHost.isBlank() || (host != pageHost && !host.endsWith(".$pageHost"))) {
                                     return false
                                 }
