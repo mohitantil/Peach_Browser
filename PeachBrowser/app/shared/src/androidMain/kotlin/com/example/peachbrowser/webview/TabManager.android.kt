@@ -15,6 +15,7 @@ object AppBackgroundTracker {
         AndroidTabWebViewPool.setAppBackgrounded(flag)
         if (flag) {
             com.example.peachbrowser.util.SessionPermissionManager.clearAllPermissions()
+            AndroidTabWebViewPool.stopActiveMediaStreams()
         }
     }
 }
@@ -81,6 +82,34 @@ object AndroidTabWebViewPool {
                 webView.post {
                     webView.evaluateJavascript(
                         "window.__PEACH_APP_BACKGROUNDED__ = $flag;",
+                        null
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun stopActiveMediaStreams() {
+        pool.values.forEach { webView ->
+            try {
+                webView.post {
+                    webView.evaluateJavascript(
+                        """
+                        (function() {
+                            try {
+                                if (navigator.mediaDevices) {
+                                    document.querySelectorAll('video, audio').forEach(function(el) {
+                                        if (el.srcObject && typeof el.srcObject.getTracks === 'function') {
+                                            el.srcObject.getTracks().forEach(function(t) { t.stop(); });
+                                            el.srcObject = null;
+                                        }
+                                    });
+                                }
+                            } catch (_) {}
+                        })();
+                        """.trimIndent(),
                         null
                     )
                 }

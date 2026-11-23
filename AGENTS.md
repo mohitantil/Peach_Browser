@@ -380,6 +380,30 @@
     - Verified Test Execution:
       - `:app:shared:jvmTest`: 36 tests completed, 0 failed, 0 skipped (`BUILD SUCCESSFUL in 2m 7s`).
       - `:app:androidApp:assembleDebug`: `BUILD SUCCESSFUL in 19s`.
+  - **Play Store Production Readiness, Silent YouTube Ad Neutralizer & Scaffolding Pass (`v5.1.3`)**:
+    - Addressed User Feedback & Implemented Play Store Production Upgrades on Branch `fix-v5.1.3`:
+      1. *Silent Ad-Free YouTube Playback (Eliminated 16x Fast-Forward Scrubbing Flashes)*:
+         - Root Cause: Legacy `fastSkipAd` accelerated video ads to `playbackRate = 16.0`, exposing users to 100-300ms of flashing ad frames and audible glitches on screen before time-jumping.
+         - Remediation: Removed `video.playbackRate = 16.0` entirely. Implemented instant visual blanking (`opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;`) on ad video elements and containers (`.ad-showing video`, `.ad-interrupting video`, `.ytp-ad-player-overlay`), coupled with zero-noise instant muting (`video.muted = true; video.volume = 0;`) and programmatic skip (`currentTime = duration + 0.1`). When ads finish, opacity, visibility, and volume are cleanly restored. Users never see or hear ads.
+      2. *Universal Sponsor & In-Feed Ad Observer*:
+         - Added `setupUniversalSponsorObserver()` in `privacy_shield.bundle.js` with `MutationObserver` targeting `[aria-label*="Sponsored" i]`, `[data-text-ad]`, `[class*="sponsored" i]`, `[id*="sponsored" i]`, `div.uEec3`, `.ad-badge`, `.promoted-tweet`, and `ytd-rich-item-renderer:has(...)` across all websites.
+         - Expanded `AdBlocker.AD_HOSTS` in `PeachWebView.android.kt` to cover leading mobile ad exchanges (`applovin.com`, `inmobi.com`, `media.net`, `unityads.unity3d.com`, `chartboost.com`, `vungle.com`, `ironsrc.com`, `adcolony.com`, `popads.net`, `propellerads.com`).
+      3. *Resilient Site Exception & Redirect Handling*:
+         - Implemented redirect loop detection cache (`redirectCountByOrigin` with a max threshold of 2 redirects per origin) in `PeachWebView.android.kt`, preventing infinite redirect loops on complex authenticated portals.
+         - Added `isIntermediateRedirectOrAuth` pattern matching to collapse intermediary redirect chains (`/oauth`, `/callback`, `/sso`, `out.reddit.com`, `t.co/`, `l.facebook.com`) in `canGoBackSmartly()`.
+         - Added graceful SSL error dialog (`onReceivedSslError`) with Proceed/Cancel options to prevent blank dead screens on self-signed or captive portal networks.
+      4. *Rock-Solid Docked UI Scaffolding (`App.kt`)*:
+         - Top omnibox address bar configured with `WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)`, guaranteeing that display cutouts and status bars never overlap or push the URL bar off-screen.
+         - Added `isKeyboardOpen` tracking via `WindowInsets.ime.getBottom(...)` to dynamically hide the bottom navigation bar and prevent viewport compression while typing.
+         - Zeroed `contentWindowInsets` on the parent `Scaffold` to eliminate nested padding anomalies.
+      5. *Hardware Sensor Ephemeral Revocation & Queue*:
+         - Introduced `pendingOriginPrompts` queue in `PeachWebView.android.kt` to prevent concurrent permission requests from clobbering each other.
+         - Added `stopActiveMediaStreams()` in `AndroidTabWebViewPool` to immediately terminate active WebRTC audio/video tracks (`t.stop()`, `el.srcObject = null`) when the app is backgrounded.
+    - Verified Compilation & Tests:
+      - Shared unit tests: `:app:shared:jvmTest` (`BUILD SUCCESSFUL in 18s`, 36 tests passing).
+      - Android Debug build: `:app:androidApp:assembleDebug` (`BUILD SUCCESSFUL in 1m 7s`).
+      - Output APK: `PeachBrowser/app/androidApp/build/outputs/apk/debug/androidApp-debug.apk` (43.5 MB).
+
 
 
 

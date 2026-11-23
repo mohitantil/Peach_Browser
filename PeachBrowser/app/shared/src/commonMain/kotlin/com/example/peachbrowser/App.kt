@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -108,6 +109,7 @@ fun App() {
         val isCurrentTabOnWeb = activeTab != null && activeTab.url.isNotBlank() && !isSubScreenOpen
         val canGoBackInWebView = webViewController.canGoBack
         val hasTabBackHistory = browserState.tabBackStack.size > 1
+        val isKeyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
         var addressText by remember { mutableStateOf("") }
         var isAddressBarFocused by remember { mutableStateOf(false) }
@@ -204,6 +206,7 @@ fun App() {
         }
 
         Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 if (!isSubScreenOpen && !webViewController.isCustomViewShowing) {
                     Surface(
@@ -214,8 +217,12 @@ fun App() {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                            .windowInsetsPadding(WindowInsets.statusBars),
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(
+                                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+                                )
+                            )
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedTextField(
@@ -297,7 +304,7 @@ fun App() {
             }
             },
             bottomBar = {
-                if (!webViewController.isCustomViewShowing) {
+                if (!webViewController.isCustomViewShowing && !isKeyboardOpen) {
                     // Sleek, modern bottom navbar with horizontal drag gesture to switch tabs
                     var bottomBarDrag by remember { mutableFloatStateOf(0f) }
 
@@ -335,8 +342,12 @@ fun App() {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 6.dp)
-                            .windowInsetsPadding(WindowInsets.navigationBars),
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(
+                                    WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal
+                                )
+                            )
+                            .padding(horizontal = 24.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {

@@ -24,13 +24,18 @@ import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.net.http.SslError
+import java.util.concurrent.ConcurrentHashMap
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -173,7 +178,26 @@ object AdBlocker {
         "openx.net",
         "casalemedia.com",
         "smartadserver.com",
-        "advertising.com"
+        "advertising.com",
+        "applovin.com",
+        "inmobi.com",
+        "media.net",
+        "unityads.unity3d.com",
+        "unity3d.com",
+        "sovrn.com",
+        "lijit.com",
+        "advertising.yahoo.com",
+        "adtechus.com",
+        "gemini.yahoo.com",
+        "chartboost.com",
+        "vungle.com",
+        "ironsrc.com",
+        "adcolony.com",
+        "flurry.com",
+        "bidswitch.net",
+        "sharethrough.com",
+        "popads.net",
+        "propellerads.com"
     )
 
     @Volatile
@@ -478,9 +502,27 @@ class PeachNativeWebView(context: Context) : WebView(context) {
         currentOAuthWebView = null
     }
 
+    private fun isIntermediateRedirectOrAuth(url: String): Boolean {
+        if (url.isBlank()) return false
+        if (UrlSanitizer.isAuthOrOAuthUrl(url)) return true
+        val lower = url.lowercase()
+        val path = try { Uri.parse(url).path?.lowercase() ?: "" } catch (_: Exception) { "" }
+        return path.contains("/oauth") ||
+                path.contains("/callback") ||
+                path.contains("/signin") ||
+                path.contains("/login") ||
+                path.contains("/sso") ||
+                path.contains("/auth") ||
+                lower.contains("out.reddit.com") ||
+                lower.contains("t.co/") ||
+                lower.contains("l.facebook.com")
+    }
+
     private fun isSamePageOrRedirect(url1: String, url2: String): Boolean {
         if (url1.isBlank() || url2.isBlank()) return false
         if (url1 == url2) return true
+        if (isIntermediateRedirectOrAuth(url2)) return true
+
         val clean1 = url1.removeSuffix("/").removePrefix("https://").removePrefix("http://")
         val clean2 = url2.removeSuffix("/").removePrefix("https://").removePrefix("http://")
         if (clean1 == clean2) return true
@@ -489,7 +531,16 @@ class PeachNativeWebView(context: Context) : WebView(context) {
         val noHash2 = clean2.substringBefore("#")
         val query1 = noHash1.substringAfter("?", "")
         val query2 = noHash2.substringAfter("?", "")
-        if (query1 != query2) return false
+        if (query1 != query2) {
+            val base1 = noHash1.substringBefore("?")
+            val base2 = noHash2.substringBefore("?")
+            if (base1.removePrefix("m.").removePrefix("www.") == base2.removePrefix("m.").removePrefix("www.")) {
+                if (isIntermediateRedirectOrAuth(url1) || isIntermediateRedirectOrAuth(url2)) {
+                    return true
+                }
+            }
+            return false
+        }
 
         val base1 = noHash1.substringBefore("?")
         val base2 = noHash2.substringBefore("?")
@@ -603,7 +654,8 @@ actual fun PeachWebView(
     var longPressedImageUrl by remember { mutableStateOf<String?>(null) }
     val audioFocusManager = koinInject<com.example.peachbrowser.util.PeachAudioFocusManager>()
     var pendingPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
-    var pendingOriginPrompt by remember { mutableStateOf<PermissionRequest?>(null) }
+    val pendingOriginPrompts = remember { mutableStateListOf<PermissionRequest>() }
+    val redirectCountByOrigin = remember { ConcurrentHashMap<String, Int>() }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -613,8 +665,8 @@ actual fun PeachWebView(
         if (pendingReq != null) {
             val allGranted = permissions.isNotEmpty() && permissions.entries.all { it.value }
             if (allGranted) {
-                // OS permissions granted; now prompt user specifically for this origin session
-                pendingOriginPrompt = pendingReq
+                // OS permissions granted; queue prompt user specifically for this origin session in FIFO order
+                pendingOriginPrompts.add(pendingReq)
             } else {
                 try {
                     pendingReq.deny()
@@ -651,8 +703,8 @@ actual fun PeachWebView(
                 pendingPermissionRequest = request
                 permissionLauncher.launch(requiredOsPermissions.toTypedArray())
             } else {
-                // OS permissions already granted; prompt user for site origin approval
-                pendingOriginPrompt = request
+                // OS permissions already granted; queue prompt user for site origin approval in FIFO order
+                pendingOriginPrompts.add(request)
             }
         }
     }
@@ -661,9 +713,7 @@ actual fun PeachWebView(
         if (pendingPermissionRequest == request) {
             pendingPermissionRequest = null
         }
-        if (pendingOriginPrompt == request) {
-            pendingOriginPrompt = null
-        }
+        pendingOriginPrompts.remove(request)
     }
 
     AndroidView(
@@ -802,6 +852,10 @@ actual fun PeachWebView(
                         override fun onPageStarted(view: WebView?, pageUrl: String?, favicon: Bitmap?) {
                             super.onPageStarted(view, pageUrl, favicon)
                             SessionPermissionManager.clearTabPermissions(tabId)
+                            pendingOriginPrompts.forEach { req ->
+                                try { req.deny() } catch (_: Exception) {}
+                            }
+                            pendingOriginPrompts.clear()
                             val canBack = if (view is PeachNativeWebView) view.canGoBackSmartly() else (view?.canGoBack() == true)
                             controller?.isLoading = true
                             controller?.canGoBack = canBack
@@ -861,6 +915,11 @@ actual fun PeachWebView(
                                 CookieManager.getInstance().flush()
                             } catch (_: Exception) {}
 
+                            val pageHost = try { Uri.parse(pageUrl ?: "").host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                            if (pageHost.isNotBlank()) {
+                                redirectCountByOrigin.remove(pageHost)
+                            }
+
                             val canBack = if (view is PeachNativeWebView) view.canGoBackSmartly() else (view?.canGoBack() == true)
                             controller?.isLoading = false
                             controller?.canGoBack = canBack
@@ -894,6 +953,111 @@ actual fun PeachWebView(
                                     browserViewModel.processIntent(BrowserIntent.UpdatePageContent(cleanText))
                                 }
                             }
+                        }
+
+                        override fun onReceivedError(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                            error: WebResourceError?
+                        ) {
+                            super.onReceivedError(view, request, error)
+                            if (request?.isForMainFrame == true) {
+                                controller?.isLoading = false
+                                val failingUrl = request.url?.toString() ?: ""
+                                val errorDescription = error?.description?.toString() ?: "Unable to connect to the server."
+                                val errorCode = error?.errorCode ?: -1
+
+                                // Avoid flashing error page for aborted loads (e.g. intent redirects or cancellations)
+                                if (errorCode == WebViewClient.ERROR_UNKNOWN || errorCode == -1) {
+                                    return
+                                }
+
+                                val errorHtml = """
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                    <style>
+                                        body { font-family: sans-serif; background: #FAFAFA; color: #1E1E2E; padding: 32px 24px; text-align: center; }
+                                        h2 { color: #5E35B1; margin-bottom: 8px; }
+                                        p { color: #666; font-size: 14px; margin-bottom: 24px; word-break: break-all; }
+                                        button { background: #7E57C2; color: white; border: none; padding: 12px 24px; border-radius: 20px; font-weight: bold; font-size: 14px; cursor: pointer; }
+                                    </style></head>
+                                    <body>
+                                        <h2>Unable to Load Page</h2>
+                                        <p>$errorDescription<br><small>$failingUrl</small></p>
+                                        <button onclick="location.reload()">Try Again</button>
+                                    </body></html>
+                                """.trimIndent()
+                                view?.loadDataWithBaseURL(failingUrl, errorHtml, "text/html", "UTF-8", failingUrl)
+                            }
+                        }
+
+                        @Deprecated("Deprecated in Java")
+                        override fun onReceivedError(
+                            view: WebView?,
+                            errorCode: Int,
+                            description: String?,
+                            failingUrl: String?
+                        ) {
+                            super.onReceivedError(view, errorCode, description, failingUrl)
+                            if (failingUrl == view?.url || failingUrl == lastLoadedUrl) {
+                                controller?.isLoading = false
+                                if (errorCode == WebViewClient.ERROR_UNKNOWN || errorCode == -1) {
+                                    return
+                                }
+                                val desc = description ?: "Unable to connect to the server."
+                                val url = failingUrl ?: ""
+                                val errorHtml = """
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                    <style>
+                                        body { font-family: sans-serif; background: #FAFAFA; color: #1E1E2E; padding: 32px 24px; text-align: center; }
+                                        h2 { color: #5E35B1; margin-bottom: 8px; }
+                                        p { color: #666; font-size: 14px; margin-bottom: 24px; word-break: break-all; }
+                                        button { background: #7E57C2; color: white; border: none; padding: 12px 24px; border-radius: 20px; font-weight: bold; font-size: 14px; cursor: pointer; }
+                                    </style></head>
+                                    <body>
+                                        <h2>Unable to Load Page</h2>
+                                        <p>$desc<br><small>$url</small></p>
+                                        <button onclick="location.reload()">Try Again</button>
+                                    </body></html>
+                                """.trimIndent()
+                                view?.loadDataWithBaseURL(url, errorHtml, "text/html", "UTF-8", url)
+                            }
+                        }
+
+                        override fun onReceivedHttpError(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                            errorResponse: WebResourceResponse?
+                        ) {
+                            super.onReceivedHttpError(view, request, errorResponse)
+                            if (request?.isForMainFrame == true) {
+                                controller?.isLoading = false
+                            }
+                        }
+
+                        override fun onReceivedSslError(
+                            view: WebView?,
+                            handler: SslErrorHandler?,
+                            error: SslError?
+                        ) {
+                            controller?.isLoading = false
+                            super.onReceivedSslError(view, handler, error)
+                        }
+
+                        override fun onRenderProcessGone(
+                            view: WebView?,
+                            detail: RenderProcessGoneDetail?
+                        ): Boolean {
+                            try {
+                                (view?.parent as? ViewGroup)?.removeView(view)
+                                view?.destroy()
+                            } catch (_: Exception) {}
+                            AndroidTabWebViewPool.remove(tabId)
+                            browserViewModel.processIntent(BrowserIntent.ReloadActiveTab())
+                            return true
                         }
 
                         override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
@@ -932,10 +1096,17 @@ actual fun PeachWebView(
                                 if (isRedirect || UrlSanitizer.isAuthOrOAuthUrl(reqUrl)) {
                                     return false
                                 }
-                                val host = try { Uri.parse(reqUrl).host ?: "" } catch (e: Exception) { "" }
-                                if (!isShieldActiveForHost(host)) {
+                                val host = try { Uri.parse(reqUrl).host?.lowercase() ?: "" } catch (e: Exception) { "" }
+                                if (host.isBlank() || !isShieldActiveForHost(host)) {
                                     return false
                                 }
+
+                                // Loop detection cache: threshold <= 2 redirects per origin
+                                val redirectCount = redirectCountByOrigin.getOrDefault(host, 0)
+                                if (redirectCount >= 2) {
+                                    return false
+                                }
+
                                 var targetUrl = reqUrl
                                 if (isDeAmpEnabled) {
                                     targetUrl = UrlSanitizer.deAmp(targetUrl)
@@ -943,13 +1114,14 @@ actual fun PeachWebView(
                                 if (isTrackingProtectionEnabled) {
                                     targetUrl = UrlSanitizer.stripTrackingParams(targetUrl)
                                 }
-                                if (targetUrl != reqUrl) {
+                                if (targetUrl != reqUrl && !UrlSanitizer.isAuthOrOAuthUrl(targetUrl)) {
+                                    redirectCountByOrigin[host] = redirectCount + 1
                                     val newHost = try { Uri.parse(targetUrl).host?.lowercase() ?: "" } catch (e: Exception) { "" }
                                     if (newHost.isNotBlank()) {
                                         currentMainFrameHost = newHost
                                         AdBlocker.currentMainFrameHost = newHost
                                     }
-                                    view?.loadUrl(targetUrl)
+                                    view?.post { view.loadUrl(targetUrl) }
                                     return true
                                 }
                                 return false
@@ -1428,7 +1600,7 @@ actual fun PeachWebView(
                 }
             }
 
-            controller?.canGoBack = webView.cachedCanGoBackSmartly
+            controller?.canGoBack = webView.canGoBackSmartly()
             controller?.canGoForward = webView.canGoForward()
 
             controller?.goBackAction = {
@@ -1557,7 +1729,9 @@ actual fun PeachWebView(
         }
     }
 
-    pendingOriginPrompt?.let { req ->
+    val activeOriginPrompt = pendingOriginPrompts.firstOrNull()
+    if (activeOriginPrompt != null) {
+        val req = activeOriginPrompt
         val origin = req.origin.toString()
         val host = try { Uri.parse(origin).host ?: origin } catch (_: Exception) { origin }
         val hasCam = req.resources.any { it.contains("VIDEO_CAPTURE", ignoreCase = true) }
@@ -1572,7 +1746,7 @@ actual fun PeachWebView(
         AlertDialog(
             onDismissRequest = {
                 try { req.deny() } catch (_: Exception) {}
-                pendingOriginPrompt = null
+                pendingOriginPrompts.remove(req)
             },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1605,7 +1779,7 @@ actual fun PeachWebView(
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
-                        pendingOriginPrompt = null
+                        pendingOriginPrompts.remove(req)
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF5E35B1)
@@ -1622,7 +1796,7 @@ actual fun PeachWebView(
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
-                        pendingOriginPrompt = null
+                        pendingOriginPrompts.remove(req)
                     }
                 ) {
                     Text("Block", fontFamily = FontFamily.SansSerif, color = Color(0xFF5E35B1))
@@ -1649,11 +1823,11 @@ actual fun PeachWebView(
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            try {
-                pendingOriginPrompt?.deny()
-            } catch (_: Exception) {}
+            pendingOriginPrompts.forEach { req ->
+                try { req.deny() } catch (_: Exception) {}
+            }
+            pendingOriginPrompts.clear()
             pendingPermissionRequest = null
-            pendingOriginPrompt = null
             SessionPermissionManager.clearTabPermissions(tabId)
             if (activity?.isFinishing == true && (browserState.isClearSessionOnExitEnabled || browserState.isPrivateMode)) {
                 clearBrowserSession()
