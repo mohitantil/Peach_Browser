@@ -91,7 +91,7 @@ fun LandingPage(
                         fontFamily = FontFamily.SansSerif
                     )
                     Text(
-                        text = "AI Agentic Web Engine",
+                        text = "Fast • Private • Ad-Free",
                         color = Color(0xFF7E57C2),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,

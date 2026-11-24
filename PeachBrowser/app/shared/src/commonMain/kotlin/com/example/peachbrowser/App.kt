@@ -373,21 +373,30 @@ fun App() {
                             }
                         }
 
-                        // 2. Center Sleek '✨ Ask AI' Action Button
+                        // 2. Center Sleek '➕ New Tab' Action Button
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = Color(0xFFF2EDFA),
                             modifier = Modifier
-                                .clickable { showChatSheet = true }
+                                .clickable {
+                                    webViewController.reset()
+                                    browserViewModel.processIntent(BrowserIntent.AddTab(""))
+                                    if (isSubScreenOpen) {
+                                        navController.navigate(BrowserHomeRoute) {
+                                            popUpTo(BrowserHomeRoute) { inclusive = false }
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                             ) {
-                                Text("✨", fontSize = 14.sp)
+                                Text("➕", fontSize = 12.sp)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Ask AI",
+                                    text = "New Tab",
                                     color = Color(0xFF7E57C2),
                                     fontFamily = FontFamily.SansSerif,
                                     fontWeight = FontWeight.Bold,

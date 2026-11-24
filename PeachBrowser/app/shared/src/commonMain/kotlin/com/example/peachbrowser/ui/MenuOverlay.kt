@@ -123,7 +123,7 @@ fun MenuOverlay(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Card 3: Share, AI & Settings
+            // Card 3: Share & Settings
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = Color.White,
@@ -134,11 +134,6 @@ fun MenuOverlay(
                     MenuOption("📤", "Share Page", onClick = {
                         onDismiss()
                         onShareCurrentPage()
-                    })
-                    HorizontalDivider(color = Color(0xFFF0F0F0))
-                    MenuOption("✨", "Peach AI Settings", onClick = {
-                        onDismiss()
-                        onNavigateToAiSettings()
                     })
                     HorizontalDivider(color = Color(0xFFF0F0F0))
                     MenuOption("⚙️", "Settings", onClick = {
