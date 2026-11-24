@@ -1,22 +1,17 @@
 # 🍑 Peach Browser
 
-> **Agentic Web & Research Browser with TypeScript-Engineered Privacy Shield & Local Metasearch**
+> **Fast, Private & Ad-Free Mobile Browser with Advanced Privacy Shield & Clock-Synced Media Playback**
 
-![Peach Browser Banner](src/ui/assets/icons/pikachu-logo.svg)
-
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![PySide6](https://img.shields.io/badge/GUI-PySide6%20%2F%20QtWebEngine-green.svg)](https://wiki.qt.io/Qt_for_Python)
-[![TypeScript](https://img.shields.io/badge/TypeScript-ES2022%20Shield-3178c6.svg)](https://www.typescriptlang.org/)
-[![Android Release](https://img.shields.io/badge/Android%20APK-Download%20Latest-brightgreen?logo=android&style=for-the-badge)](https://github.com/mohitantil/Peach_Browser/releases/latest)
-[![Kotlin Multiplatform](https://img.shields.io/badge/Kotlin-Multiplatform%202.4-7F52FF?logo=kotlin&style=for-the-badge)](https://kotlinlang.org/docs/multiplatform.html)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg?style=for-the-badge)](LICENSE)
+[![Kotlin Multiplatform](https://img.shields.io/badge/Kotlin-Multiplatform%202.4-7F52FF?logo=kotlin&style=for-the-badge)](https://kotlinlang.org/docs/multiplatform.html)
+[![Android Release](https://img.shields.io/badge/Android%20APK-Download%20Latest-brightgreen?logo=android&style=for-the-badge)](https://github.com/mohitantil/Peach_Browser/releases/latest)
 
 > ### 📱 **Download Peach Browser for Android**
-> **Latest Version**: [**v1.5 Release APK**](https://github.com/mohitantil/Peach_Browser/releases/latest)
+> **Latest Version**: [**v5.2.0 Release APK**](https://github.com/mohitantil/Peach_Browser/releases/latest)
 >
-> 🚀 **[📥 Click here to Download `androidApp-debug.apk`](https://github.com/mohitantil/Peach_Browser/releases/latest)**
+> 🚀 **[📥 Click here to Download `androidApp-release.apk`](https://github.com/mohitantil/Peach_Browser/releases/latest)**
 >
-> Experience Brave-grade ad blocking, background YouTube streaming, sleep timer, real-time synced downloads, and ephemeral session privacy directly on your Android phone!
+> Experience advanced ad blocking, background YouTube streaming, sleep timer, real-time synced downloads, and ephemeral session privacy directly on your Android phone!
 
 ---
 
@@ -25,13 +20,13 @@
 **Peach Browser** is an editorial, privacy-first web browser built with **Kotlin Multiplatform (Android & iOS)** and a desktop research implementation in **Python (PySide6 / QtWebEngine)**. Designed specifically for deep research, ad-free browsing, and background streaming, Peach combines:
 
 1. **Android App (Kotlin Multiplatform & Compose)**:
-   - 🛡️ **Brave-Grade Privacy Shield**: Zero video ads on YouTube/YouTube Music, tracking query stripper, Canvas/WebGL/Audio fingerprint farbling, and De-AMPing.
+   - 🛡️ **Hardened Privacy Shield**: Zero video ads on YouTube/YouTube Music, tracking query stripper, Canvas/WebGL/Audio fingerprint farbling, and De-AMPing.
    - 🎵 **Background Audio & Video Streaming**: Uninterrupted playback when screen is locked or in background via dedicated foreground service.
    - ⏰ **Clock-Synced Sleep Timer**: Native sleep countdown supporting auto-pause, tab closure, or browser exit.
-   - 🖼️ **Brave-Style Long-Press Image Context Menu**: Download images (including base64/data URIs), open in new tab, or copy links with zero heavy dependencies.
+   - 🖼️ **Context-Aware Long-Press Image Menu**: Download images (including base64/data URIs), open in new tab, or copy links with zero heavy dependencies.
    - ⏬ **Real-Time Storage Synced Downloads**: Live byte progress tracking and real-time synchronization with device storage.
-   - ⚡ **AI Portal Compatibility Mode**: First-class support for Gemini, ChatGPT, Claude, and DeepSeek.
-2. **Zero-Ad Desktop & Multiplatform Experience**: Brave-grade network request filtering combined with procedural scriptlets that neutralize video ads and strip tracking pixels.
+   - ⚡ **Web Compatibility Mode**: First-class support for single-page apps and security verification challenges.
+2. **Zero-Ad Browsing Experience**: Advanced network request filtering combined with procedural scriptlets that neutralize video ads and strip tracking pixels.
 3. **Ephemeral Privacy by Default ("Shred on Close")**: Every window runs in an off-the-record profile. Cookies, caches, and visited links exist only in memory and are shredded on exit. Passwords are never saved or suggested.
 4. **Local Metasearch Engine**: Native integration with a self-hosted **SearXNG** Docker instance (running on port `8888`) with seamless failover to **Tavily Search API**.
 5. **Integrated AI Research Assistant & Active Page RAG**: A floating assistant drawer featuring fluid cubic-bezier animations, real-time page vector indexing via **ChromaDB**, zero-download local ONNX embeddings (`all-MiniLM-L6-v2`), and multi-LLM support (Groq, Mistral, OpenRouter).

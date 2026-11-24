@@ -11,7 +11,7 @@ Peach Browser was built from the ground up on the principle of **absolute data s
 ## 1. Zero Telemetry & Zero Data Collection
 - **No Analytics SDKs**: Peach Browser does not bundle Google Analytics, Firebase Analytics, Meta Pixel, Adjust, AppsFlyer, or any third-party tracking libraries.
 - **No Account Requirement**: You can browse immediately without creating an account or providing an email address.
-- **No Search Logging**: Your search queries are sent directly to the search provider of your choice (DuckDuckGo, Brave Search, Google, or Bing) using direct client-side requests; no intermediate proxy records your queries.
+- **No Search Logging**: Your search queries are sent directly to the search provider of your choice (DuckDuckGo, Brave Search, Startpage, Google, or Bing) using direct client-side requests; no intermediate proxy records your queries.
 
 ---
 
@@ -31,7 +31,7 @@ Peach Browser was built from the ground up on the principle of **absolute data s
 
 ---
 
-## 4. Brave-Grade Privacy Shield & Ad-Blocking
+## 4. Hardened Privacy Shield & Ad-Blocking
 - **Network & Cosmetic Filtering**: Built-in Privacy Shields block intrusive advertisements, tracking scripts, and malicious domains directly on your device.
 - **Query Parameter Sanitization**: Tracking tokens (`utm_*`, `fbclid`, `gclid`, `si`, `igshid`, `msclkid`) are stripped from web addresses before navigation occurs.
 - **Anti-Fingerprinting Farbler**: Injects subtle pseudo-random micro-noise into Canvas and AudioContext readings to prevent third-party scripts from building persistent device fingerprints across the web.

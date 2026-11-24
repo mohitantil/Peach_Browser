@@ -26,14 +26,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.peachbrowser.presentation.mvi.BrowserIntent
 import com.example.peachbrowser.presentation.viewmodel.BrowserViewModel
-import com.example.peachbrowser.presentation.viewmodel.ChatViewModel
-import com.example.peachbrowser.ui.ChatDrawer
 import com.example.peachbrowser.ui.CommonBackHandler
 import com.example.peachbrowser.ui.LandingPage
 import com.example.peachbrowser.ui.MenuOverlay
 import com.example.peachbrowser.ui.ShieldSheet
 import com.example.peachbrowser.ui.SleepTimerSheet
-import com.example.peachbrowser.ui.screens.ai.AiSettingsScreen
 import com.example.peachbrowser.ui.screens.bookmarks.BookmarksScreen
 import com.example.peachbrowser.ui.screens.downloads.DownloadsScreen
 import com.example.peachbrowser.ui.screens.history.HistoryScreen
@@ -65,9 +62,6 @@ object BookmarksRoute
 @Serializable
 object DownloadsRoute
 
-@Serializable
-object AiSettingsRoute
-
 private val CustomTypography = Typography(
     displayLarge = TextStyle(fontFamily = FontFamily.SansSerif),
     displayMedium = TextStyle(fontFamily = FontFamily.SansSerif),
@@ -90,9 +84,7 @@ private val CustomTypography = Typography(
 @Composable
 fun App() {
     MaterialTheme(typography = CustomTypography) {
-        val chatViewModel = koinInject<ChatViewModel>()
         val browserViewModel = koinInject<BrowserViewModel>()
-        val chatState by chatViewModel.state.collectAsState()
         val browserState by browserViewModel.state.collectAsState()
 
         val webViewController = rememberPeachWebViewController()
@@ -113,11 +105,9 @@ fun App() {
 
         var addressText by remember { mutableStateOf("") }
         var isAddressBarFocused by remember { mutableStateOf(false) }
-        val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val menuSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val sleepTimerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val shieldSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        var showChatSheet by remember { mutableStateOf(false) }
         var showMenuSheet by remember { mutableStateOf(false) }
         var showSleepTimerSheet by remember { mutableStateOf(false) }
         var showShieldSheet by remember { mutableStateOf(false) }
@@ -172,7 +162,7 @@ fun App() {
         }
 
         // Multiplatform Back Navigation & Backward Swipe Hierarchy
-        val isBackHandled = webViewController.isCustomViewShowing || isSubScreenOpen || showChatSheet || showMenuSheet || showSleepTimerSheet || showShieldSheet || isCurrentTabOnWeb
+        val isBackHandled = webViewController.isCustomViewShowing || isSubScreenOpen || showMenuSheet || showSleepTimerSheet || showShieldSheet || isCurrentTabOnWeb
 
         CommonBackHandler(enabled = isBackHandled) {
             when {
@@ -182,12 +172,11 @@ fun App() {
                 }
 
                 // Priority 1: Dismiss active modal bottom sheets
-                showChatSheet -> showChatSheet = false
                 showMenuSheet -> showMenuSheet = false
                 showSleepTimerSheet -> showSleepTimerSheet = false
                 showShieldSheet -> showShieldSheet = false
 
-                // Priority 2: Pop sub-screens (Settings, TabsList, Bookmarks, History, Downloads, AiSettings)
+                // Priority 2: Pop sub-screens (Settings, TabsList, Bookmarks, History, Downloads)
                 isSubScreenOpen -> navController.popBackStack()
 
                 // Priority 3: Navigate backward through WebView page history within active tab
@@ -543,11 +532,6 @@ fun App() {
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
-                    composable<AiSettingsRoute> {
-                        AiSettingsScreen(
-                            onNavigateBack = { navController.popBackStack() }
-                        )
-                    }
                 }
 
                 // Sleek Floating Sleep Timer Pill (visible when streaming audio or timer running)
@@ -587,24 +571,6 @@ fun App() {
             }
         }
 
-        if (showChatSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showChatSheet = false },
-                sheetState = bottomSheetState,
-                containerColor = Color.Transparent,
-                dragHandle = null
-            ) {
-                ChatDrawer(
-                    state = chatState,
-                    activeUrl = webViewController.currentUrl.ifBlank { browserState.currentUrl },
-                    activeTitle = webViewController.currentTitle.ifBlank { browserState.activePageTitle },
-                    activeContent = webViewController.pageContent.ifBlank { browserState.activePageContent },
-                    onIntent = { chatViewModel.processIntent(it) },
-                    modifier = Modifier.fillMaxWidth().fillMaxHeight(0.75f)
-                )
-            }
-        }
-
         if (showMenuSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showMenuSheet = false },
@@ -622,7 +588,6 @@ fun App() {
                     onNavigateToBookmarks = { navController.navigate(BookmarksRoute) },
                     onNavigateToDownloads = { navController.navigate(DownloadsRoute) },
                     onNavigateToSettings = { navController.navigate(SettingsRoute) },
-                    onNavigateToAiSettings = { navController.navigate(AiSettingsRoute) },
                     onOpenSleepTimer = { showSleepTimerSheet = true },
                     onShareCurrentPage = {
                         val shareUrl = webViewController.currentUrl.ifBlank { browserState.currentUrl }

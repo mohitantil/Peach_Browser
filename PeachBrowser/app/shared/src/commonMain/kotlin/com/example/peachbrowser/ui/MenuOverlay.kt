@@ -26,7 +26,6 @@ fun MenuOverlay(
     onNavigateToBookmarks: () -> Unit = {},
     onNavigateToDownloads: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
-    onNavigateToAiSettings: () -> Unit = {},
     onShareCurrentPage: () -> Unit = {},
     onOpenSleepTimer: () -> Unit = {},
     modifier: Modifier = Modifier

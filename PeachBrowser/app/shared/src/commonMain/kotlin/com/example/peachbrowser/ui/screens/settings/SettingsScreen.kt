@@ -197,7 +197,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Sites in Compatibility Mode bypass aggressive DOM element hiding and farbling so AI portals (Gemini, ChatGPT, Claude) and Cloudflare Turnstile work seamlessly. Session cookies are still shredded on exit.",
+                        text = "Sites in Compatibility Mode bypass aggressive DOM element hiding and farbling so complex single-page apps, media portals, and security verification challenges work seamlessly. Session cookies are still shredded on exit.",
                         fontSize = 12.sp,
                         color = Color(0xFF757575),
                         fontFamily = FontFamily.SansSerif
@@ -378,7 +378,7 @@ fun SettingsScreen(
                 text = {
                     Column {
                         Text(
-                            "Enter a domain (e.g. gemini.google.com or chatgpt.com) to run in Compatibility Mode.",
+                            "Enter a domain (e.g. example.com or news.ycombinator.com) to run in Compatibility Mode.",
                             fontSize = 13.sp,
                             color = Color(0xFF616161),
                             fontFamily = FontFamily.SansSerif
@@ -388,7 +388,7 @@ fun SettingsScreen(
                             value = newExceptionDomain,
                             onValueChange = { newExceptionDomain = it },
                             label = { Text("Domain") },
-                            placeholder = { Text("e.g. claude.ai") },
+                            placeholder = { Text("e.g. example.com") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )

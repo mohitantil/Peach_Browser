@@ -61,9 +61,9 @@ class SearchEngineUtilTest {
 
     @Test
     fun testTrimWhitespaceInQuery() {
-        val engine = SearchEngine.BRAVE
+        val engine = SearchEngine.STARTPAGE
         val url = engine.buildSearchUrl("   spaces around   ")
-        assertEquals("https://search.brave.com/search?q=spaces+around", url)
+        assertEquals("https://www.startpage.com/sp/search?query=spaces+around", url)
     }
 
     @Test

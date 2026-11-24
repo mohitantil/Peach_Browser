@@ -21,19 +21,19 @@ enum class SearchEngine(
         iconEmoji = "🦁",
         description = "Independent privacy search engine"
     ),
-    GOOGLE(
-        id = "Google",
-        displayName = "Google",
-        searchUrlTemplate = "https://www.google.com/search?q=%s",
-        iconEmoji = "🔍",
-        description = "Comprehensive global web search"
-    ),
     STARTPAGE(
         id = "Startpage",
         displayName = "Startpage",
         searchUrlTemplate = "https://www.startpage.com/sp/search?query=%s",
         iconEmoji = "🛡️",
         description = "Private search results with zero profiling"
+    ),
+    GOOGLE(
+        id = "Google",
+        displayName = "Google",
+        searchUrlTemplate = "https://www.google.com/search?q=%s",
+        iconEmoji = "🔍",
+        description = "Comprehensive global web search"
     ),
     BING(
         id = "Bing",
