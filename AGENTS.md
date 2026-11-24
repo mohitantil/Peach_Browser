@@ -408,3 +408,19 @@
 
 
 
+- **2026-11-24**:
+  - **Google Play Store Production Release Packaging (`v5.2.0-playstore`)**:
+    - Replaced all non-functional/dead-end AI UI to strictly comply with Google Play Minimum Functionality Policy:
+      - Bottom Navigation Bar: Replaced `✨ Ask AI` button with a sleek, modern `➕ New Tab` button in `App.kt`. On-tap resets the controller, dispatches `BrowserIntent.AddTab("")`, and navigates to the landing page cleanly.
+      - Menu: Removed `✨ Peach AI Settings` from Card 3 in `MenuOverlay.kt`.
+      - Branding: Updated `LandingPage.kt` subtitle from `"AI Agentic Web Engine"` to `"Fast • Private • Ad-Free"`.
+    - Android Build Configuration & ProGuard Optimization:
+      - Updated `build.gradle.kts`: Bumped `versionCode = 520` and `versionName = "5.2.0"`.
+      - Configured production release signing config with fallback to debug signing for automated local validation.
+      - Hardened `proguard-rules.pro` with explicit rules preserving `PeachNativeBridge` `@JavascriptInterface`, Compose Multiplatform, SQLDelight database entities, and Koin dependency injection.
+    - Play Store Legal & Privacy Documentation:
+      - Authored comprehensive `PRIVACY_POLICY.md` ready for Google Play Console submission detailing zero telemetry, client-side ad-blocking, ephemeral camera/mic sensor usage (`SessionPermissionManager.kt`), and automatic session shredding on exit.
+    - Verified Build & Compilation:
+      - `:app:shared:jvmTest`: 36 tests completed, 0 failed, 0 skipped (`BUILD SUCCESSFUL in 48s`).
+      - `:app:androidApp:bundleRelease`: Generated signed Android App Bundle (`.aab`) at `app/androidApp/build/outputs/bundle/release/androidApp-release.aab` (52.2 MB).
+      - `:app:androidApp:assembleRelease`: Generated signed release APK at `app/androidApp/build/outputs/apk/release/androidApp-release.apk` (44.0 MB).
